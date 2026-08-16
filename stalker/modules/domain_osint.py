@@ -7,7 +7,7 @@ Output:
 - SSL certificate details + SAN (all domains on same cert)
 - Hosting provider + CDN detection
 - Website technology stack (CMS, framework, analytics)
-- IP of server + geolocation
+- IP of server + geolocation (konsensus 8 sumber: 3 DB lokal + 5 API online + resolver wilayah)
 - Historical registrant data (via ViewDNS)
 - Subdomain enumeration (crt.sh + DNS brute force)
 - Email harvesting from domain (common formats)
@@ -130,18 +130,42 @@ async def detect_technology(domain: str) -> Dict[str, Any]:
         return {"error": str(e)[:60]}
 
 async def get_ip_geo(domain: str) -> Dict[str, Any]:
-    """Resolve domain to IP and geolocate."""
+    """Resolve domain to IP and geolocate via konsensus 8 sumber (3 DB lokal + 5 API online + resolver wilayah)."""
     try:
         loop = asyncio.get_event_loop()
         ip = await loop.run_in_executor(None, socket.gethostbyname, domain)
+        from modules.geoip_consensus import geolocate as _geo
+
         async with prepare_client(timeout=10) as c:
-            r = await c.get(f"http://ip-api.com/json/{ip}?fields=status,country,city,isp,org,proxy,hosting,lat,lon")
-            if r.status_code == 200:
-                d = r.json()
-                if d.get("status") == "success":
-                    d["ip"] = ip
-                    return d
-        return {"ip": ip}
+            async def get_json(url: str):
+                r = await c.get(url)
+                if r.status_code == 200:
+                    return r.json()
+                return None
+
+            g = await _geo(ip, get_json)
+        if not g:
+            return {"ip": ip}
+        # kembalikan key ala ip-api (kompatibel dgn downstream)
+        return {
+            "ip": ip,
+            "status": "success",
+            "country": g.get("country", ""),
+            "countryCode": g.get("country_code", ""),
+            "regionName": g.get("region", ""),
+            "city": g.get("city", ""),
+            "zip": g.get("zip", ""),
+            "lat": g.get("lat"),
+            "lon": g.get("lon"),
+            "isp": g.get("isp", ""),
+            "org": g.get("org", ""),
+            "as": g.get("asn", ""),
+            "mobile": g.get("is_mobile", False),
+            "proxy": g.get("is_proxy", False),
+            "hosting": g.get("is_hosting", False),
+            "geo_confidence": g.get("geo_confidence"),
+            "geo_note": g.get("geo_note", ""),
+        }
     except Exception:
         return {}
 

@@ -3,6 +3,7 @@
 """Zqrya v3.0 - Username Module (Enhanced)"""
 
 import asyncio
+import hashlib
 import random
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -84,34 +85,19 @@ class UsernameModule(BaseModule):  # <-- PASTIKAN NAMA CLASS INI
                                    any(b in body_text for b in ['user not found', 'page not found']):
                                     return None
                                 
-                                # Cari nama profil
-                                name = None
-                                name_selectors = [
-                                    'h1', 'h2', '.profile-name', '.displayname',
-                                    '[class*="name"]', '[class*="username"]',
-                                    '.full-name', '.profile-header-name',
-                                    'meta[property="og:title"]', 'title'
-                                ]
-                                for sel in name_selectors:
-                                    try:
-                                        if sel.startswith('meta'):
-                                            el = soup.select_one(sel)
-                                            if el and el.get('content'):
-                                                name = el.get('content')[:80]
-                                                break
-                                        else:
-                                            el = soup.select_one(sel)
-                                            if el and el.get_text(strip=True):
-                                                name = el.get_text(strip=True)[:80]
-                                                break
-                                    except:
-                                        continue
-                                
+                                # Judul halaman (data asli yang diambil, bukan "nama profil")
+                                page_title = (soup.title.string or '').strip()[:200] if soup.title else None
+                                og_title = None
+                                og = soup.select_one('meta[property="og:title"]')
+                                if og and og.get('content'):
+                                    og_title = og.get('content').strip()[:200]
+
                                 return {
                                     'platform': platform['name'],
                                     'url': str(resp.url),
                                     'category': platform.get('category', 'social'),
-                                    'profile_name': name,
+                                    'page_title': page_title,
+                                    'og_title': og_title,
                                     'status': 'found'
                                 }
                             except Exception:
@@ -119,7 +105,8 @@ class UsernameModule(BaseModule):  # <-- PASTIKAN NAMA CLASS INI
                                     'platform': platform['name'],
                                     'url': str(resp.url),
                                     'category': platform.get('category', 'social'),
-                                    'profile_name': None,
+                                    'page_title': None,
+                                    'og_title': None,
                                     'status': 'found'
                                 }
                         
@@ -130,7 +117,8 @@ class UsernameModule(BaseModule):  # <-- PASTIKAN NAMA CLASS INI
                                     'platform': platform['name'],
                                     'url': loc,
                                     'category': platform.get('category', 'social'),
-                                    'profile_name': None,
+                                    'page_title': None,
+                                    'og_title': None,
                                     'status': 'redirect'
                                 }
                             
@@ -163,6 +151,18 @@ class UsernameModule(BaseModule):  # <-- PASTIKAN NAMA CLASS INI
         possible_emails = [f"{username}@{d}" for d in
                            ['gmail.com', 'yahoo.com', 'outlook.com', 
                             'hotmail.com', 'protonmail.com', 'mail.com']]
+        variations = self._generate_variations(username)[:10]
+
+        # Verifikasi kandidat ke sumber publik (eksistensi, bukan kepemilikan)
+        verified_emails = await self._verify_emails(possible_emails)
+        verified_variations = await self._verify_variations(variations)
+
+        # Jejak historis (Wayback Machine) — profil lama/hapus
+        try:
+            from stalker.modules.wayback_checker import full_wayback_intel
+            wayback = await full_wayback_intel(username)
+        except Exception:
+            wayback = {'total_archived': 0, 'platforms_archived': {}}
 
         data = {
             'username': username,
@@ -172,8 +172,12 @@ class UsernameModule(BaseModule):  # <-- PASTIKAN NAMA CLASS INI
             'by_category': by_cat,
             'profiles': [f['url'] for f in found],
             'possible_emails': possible_emails,
-            'variations': self._generate_variations(username)[:10],
+            'verified_emails': verified_emails,
+            'variations': variations,
+            'verified_variations': verified_variations,
+            'wayback': wayback,
             'categories': list(by_cat.keys()),
+            'note': 'possible_emails & variations = tebakan; verified_* = eksistensi profil publik, bukan kepemilikan.',
             'timestamp': datetime.now().isoformat()
         }
         return self.create_result(username, data, [f['platform'] for f in found])
@@ -185,3 +189,39 @@ class UsernameModule(BaseModule):  # <-- PASTIKAN NAMA CLASS INI
         for s in ['real', 'official', 'admin', '_id', '_official', 'official_']:
             v += [f"{u}{s}", f"{s}{u}"]
         return list(dict.fromkeys(v))
+
+    async def _verify_emails(self, emails: List[str]) -> List[Dict]:
+        """Verify candidate emails exist via Gravatar (public, real signal)."""
+        verified = []
+        for email in emails[:6]:
+            gh = hashlib.md5(email.encode()).hexdigest()
+            try:
+                async with self.session.get(
+                    f'https://www.gravatar.com/avatar/{gh}?d=404',
+                    timeout=aiohttp.ClientTimeout(total=4)
+                ) as r:
+                    if r.status == 200:
+                        verified.append({
+                            'email': email,
+                            'gravatar': f'https://www.gravatar.com/avatar/{gh}',
+                            'source': 'gravatar',
+                        })
+            except Exception:
+                pass
+        return verified
+
+    async def _verify_variations(self, variations: List[str]) -> List[Dict]:
+        """Check which username variations have an existing public profile."""
+        verified = []
+        tasks = []
+        metas = []
+        for v in variations:
+            for platform, url_tpl in (('telegram', 'https://t.me/{}'),
+                                      ('github', 'https://github.com/{}')):
+                tasks.append(self.check_profile_exists(v, url_tpl.format(v), platform))
+                metas.append((v, platform))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for (v, platform), r in zip(metas, results):
+            if r is True:
+                verified.append({'username': v, 'platform': platform})
+        return verified

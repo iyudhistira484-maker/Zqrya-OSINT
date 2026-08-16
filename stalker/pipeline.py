@@ -536,7 +536,14 @@ async def _run_maigret(username: str, max_sites: int = None, **kwargs) -> Dict[s
         maigret_logger.setLevel(logging.ERROR)
         logging.getLogger("maigret").setLevel(logging.ERROR)
 
-        query_notify = QueryNotifyPrint(color=False)
+        class _SilentNotify(QueryNotifyPrint):
+            """Notifier diam — jangan print baris per-site ([+] / [-] / [?]).
+            Hasil tetap masuk ke return dict."""
+            def success(self, message, symbol="+"): pass
+            def warning(self, message, symbol="-", advice=None): pass
+            def info(self, message, symbol="*"): pass
+
+        query_notify = _SilentNotify(color=False, silent=True)
         cf_config = await flaresolverr.detect()
 
         results = await maigret_module.search(

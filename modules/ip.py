@@ -9,20 +9,14 @@ from typing import Dict, Optional
 from datetime import datetime
 import aiohttp
 from modules.base import BaseModule
+from modules.geoip_consensus import geolocate
 
 
 class IPModule(BaseModule):
     def __init__(self, session):
         super().__init__(session)
         self.name = "ip"
-        
-        # Geolocation APIs (free, no key required)
-        self.geo_apis = [
-            "http://ip-api.com/json/{}?fields=status,message,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,isp,org,as,asname,mobile,proxy,hosting,query",
-            "https://ipapi.co/{}/json/",
-            "https://ipinfo.io/{}/json",  # Free tier with limited requests
-        ]
-        
+
         # RDAP servers for all RIRs
         self.rdap_servers = [
             'https://rdap.arin.net/registry/ip/{}',      # North America
@@ -31,21 +25,21 @@ class IPModule(BaseModule):
             'https://rdap.lacnic.net/rdap/ip/{}',        # Latin America
             'https://rdap.afrinic.net/rdap/ip/{}',       # Africa
         ]
-        
+
         # Simple cache untuk mengurangi request duplikat
         self._cache = {}
         self._cache_ttl = 3600  # 1 hour cache
 
     async def scan(self, target: str) -> Dict:
         ip = target.strip()
-        
+
         # Check cache
         cache_key = f"ip_{ip}"
         if cache_key in self._cache:
             cached_time, cached_result = self._cache[cache_key]
             if (datetime.now() - cached_time).total_seconds() < self._cache_ttl:
                 return cached_result
-        
+
         try:
             ip_obj = ipaddress.ip_address(ip)
         except ValueError:
@@ -78,7 +72,10 @@ class IPModule(BaseModule):
             'is_tor': False,
             'rdap': {},
             'abuse_contact': None,
-            'risk_score': None,  # 0-100, higher = more risky
+            'shodan': {},
+            'risk_score': None,  # skor deterministik dari sinyal terverifikasi
+            'risk_factors': [],
+            'risk_note': '',
             'timestamp': datetime.now().isoformat()
         }
 
@@ -89,9 +86,10 @@ class IPModule(BaseModule):
             pass
 
         if not ip_obj.is_private and not ip_obj.is_loopback and not ip_obj.is_reserved:
-            geo, rdap = await asyncio.gather(
+            geo, rdap, shodan = await asyncio.gather(
                 self._geolocate(ip),
-                self._rdap(ip)
+                self._rdap(ip),
+                self._shodan(ip)
             )
             if geo:
                 result.update(geo)
@@ -99,9 +97,20 @@ class IPModule(BaseModule):
                 result['rdap'] = rdap
                 if rdap.get('abuse_email'):
                     result['abuse_contact'] = rdap['abuse_email']
-            
-            # Calculate risk score based on available data
-            result['risk_score'] = self._calculate_risk_score(result)
+            if shodan:
+                result['shodan'] = shodan
+
+            # Lokasi TERDAFTAR ISP/ASN dari RDAP autnum (verifiable, bukan GeoIP).
+            # Berguna untuk ISP regional kecil yang alokasinya tak tercatat sampai
+            # kota di GeoIP (mis. ISP Gresik sering ditebak "Surabaya").
+            asn = result.get('asn') or (result.get('rdap') or {}).get('asn')
+            if asn:
+                isp_loc = await self._rdap_asn(asn)
+                if isp_loc:
+                    result['isp_registered'] = isp_loc
+
+            # Hitung skor dari sinyal nyata (Shodan terverifikasi + flag perkiraan)
+            result['risk_score'], result['risk_factors'], result['risk_note'] = self._calculate_risk_score(result)
         else:
             result['note'] = 'Private/loopback/reserved IP — limited data available'
 
@@ -110,115 +119,32 @@ class IPModule(BaseModule):
             sources.append('ip-api.com')
         if result.get('rdap'):
             sources.append('rdap')
-        
+        if result.get('shodan'):
+            sources.append('shodan-internetdb')
+
         final_result = self.create_result(ip, result, sources)
-        
+
         # Cache result
         self._cache[cache_key] = (datetime.now(), final_result)
-        
+
         return final_result
 
     async def _geolocate(self, ip: str) -> Optional[Dict]:
-        """Get geolocation data from multiple APIs with fallback"""
-        
-        # Try ip-api.com first (fastest, most detailed)
-        try:
-            async with self.session.get(
-                self.geo_apis[0].format(ip),
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as r:
-                if r.status == 200:
-                    d = await r.json()
-                    if d.get('status') == 'success':
-                        return {
-                            'country': d.get('country'),
-                            'country_code': d.get('countryCode'),
-                            'region': d.get('regionName'),
-                            'city': d.get('city'),
-                            'zip': d.get('zip'),
-                            'lat': d.get('lat'),
-                            'lon': d.get('lon'),
-                            'timezone': d.get('timezone'),
-                            'isp': d.get('isp'),
-                            'org': d.get('org'),
-                            'asn': d.get('as', '').split()[0] if d.get('as') else None,
-                            'asn_name': d.get('asname'),
-                            'is_mobile': d.get('mobile', False),
-                            'is_proxy': d.get('proxy', False),
-                            'is_hosting': d.get('hosting', False),
-                        }
-        except Exception:
-            pass
+        """Geolokasi gabungan (shared core) — lihat modules/geoip_consensus.py."""
+        return await geolocate(ip, self._fetch_json)
 
-        # Fallback: ipapi.co
+    async def _fetch_json(self, url: str):
+        """Ambil JSON dari URL (aiohttp) — dipakai shared geolocate()."""
         try:
             async with self.session.get(
-                self.geo_apis[1].format(ip),
-                timeout=aiohttp.ClientTimeout(total=5)
+                url,
+                timeout=aiohttp.ClientTimeout(total=6),
             ) as r:
-                if r.status == 200:
-                    d = await r.json()
-                    if not d.get('error'):
-                        return {
-                            'country': d.get('country_name'),
-                            'country_code': d.get('country_code'),
-                            'region': d.get('region'),
-                            'city': d.get('city'),
-                            'zip': d.get('postal'),
-                            'lat': d.get('latitude'),
-                            'lon': d.get('longitude'),
-                            'timezone': d.get('timezone'),
-                            'isp': d.get('org'),
-                            'org': d.get('org'),
-                            'asn': d.get('asn'),
-                            'asn_name': None,
-                            'is_mobile': d.get('mobile', False),
-                            'is_proxy': d.get('proxy', False),
-                            'is_hosting': d.get('hosting', False),
-                        }
+                if r.status != 200:
+                    return None
+                return await r.json(content_type=None)
         except Exception:
-            pass
-
-        # Second fallback: ipinfo.io (limited but free)
-        try:
-            async with self.session.get(
-                self.geo_apis[2].format(ip),
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as r:
-                if r.status == 200:
-                    d = await r.json()
-                    if d and 'country' in d:
-                        # Parse ASN from org field (e.g., "AS15169 Google LLC")
-                        asn = None
-                        asn_name = None
-                        org = d.get('org', '')
-                        if org and org.startswith('AS'):
-                            parts = org.split(' ', 1)
-                            asn = parts[0]
-                            if len(parts) > 1:
-                                asn_name = parts[1]
-                        
-                        return {
-                            'country': d.get('country'),
-                            'country_code': d.get('country'),
-                            'region': d.get('region'),
-                            'city': d.get('city'),
-                            'zip': d.get('postal'),
-                            'lat': float(d.get('loc', '0,0').split(',')[0]) if d.get('loc') else None,
-                            'lon': float(d.get('loc', '0,0').split(',')[1]) if d.get('loc') else None,
-                            'timezone': d.get('timezone'),
-                            'isp': d.get('org'),
-                            'org': d.get('org'),
-                            'asn': asn,
-                            'asn_name': asn_name,
-                            'is_mobile': False,
-                            'is_proxy': False,
-                            'is_hosting': False,
-                        }
-        except Exception:
-            pass
-            
-        return None
+            return None
 
     async def _rdap(self, ip: str) -> Dict:
         """RDAP lookup with multiple RIR servers"""
@@ -278,54 +204,143 @@ class IPModule(BaseModule):
                 continue
         return {}
 
-    def _calculate_risk_score(self, data: Dict) -> int:
+    async def _rdap_asn(self, asn: str) -> Dict:
+        """Lokasi TERDAFTAR ISP/ASN dari RDAP autnum — verifiable, bukan GeoIP.
+
+        Ini lokasi kantor/registrasi ISP, BUKAN lokasi fisik si IP. Berguna untuk
+        ISP kecil/regional yang alokasinya tidak tercatat sampai kota di GeoIP.
         """
-        Calculate risk score (0-100) based on IP attributes
-        Higher score = more suspicious/risky
+        asn_num = str(asn or '').replace('AS', '').replace('as', '').strip()
+        if not asn_num.isdigit():
+            return {}
+        for url_tpl in ('https://rdap.apnic.net/autnum/{}', 'https://rdap.db.ripe.net/autnum/{}'):
+            try:
+                async with self.session.get(
+                    url_tpl.format(asn_num),
+                    timeout=aiohttp.ClientTimeout(total=5),
+                    headers={'Accept': 'application/rdap+json'},
+                ) as r:
+                    if r.status != 200:
+                        continue
+                    d = await r.json(content_type=None)
+                    name = d.get('name') or ''
+                    blob = name
+                    for rem in d.get('remarks', []):
+                        blob += '\n' + '\n'.join(rem.get('description', []))
+                    for e in d.get('entities', []):
+                        vc = e.get('vcardArray', [None, []])[1]
+                        for f in vc:
+                            if isinstance(f, list) and f[0] == 'adr':
+                                addr = [x for x in f[1:] if isinstance(x, str) and x.strip()]
+                                if addr:
+                                    blob += '\n' + ', '.join(addr)
+                    city, region = self._parse_id_address(blob)
+                    info = {'asn': f'AS{asn_num}', 'name': name}
+                    if city:
+                        info['city'] = city
+                    if region:
+                        info['region'] = region
+                    return info
+            except Exception:
+                continue
+        return {}
+
+    @staticmethod
+    def _parse_id_address(text: str):
+        """Ekstrak (kota/kabupaten, provinsi) dari alamat berformat Indonesia."""
+        import re
+        text = text or ''
+        city = None
+        region = None
+        m = re.search(r'(?:Kab\.?|Kabupaten|Kota)\s+([A-Za-z][A-Za-z\.\']+)', text)
+        if m:
+            city = m.group(1).strip(' .')
+        for prov in ['Jawa Timur', 'Jawa Barat', 'Jawa Tengah', 'DKI Jakarta', 'Jakarta',
+                     'Banten', 'DI Yogyakarta', 'Yogyakarta', 'Bali', 'Sumatera Utara',
+                     'Sumatera Selatan', 'Sumatera Barat', 'Riau', 'Kepulauan Riau',
+                     'Kalimantan Timur', 'Kalimantan Barat', 'Kalimantan Selatan', 'Kalimantan Tengah',
+                     'Kalimantan Utara', 'Sulawesi Selatan', 'Sulawesi Utara', 'Sulawesi Tengah',
+                     'Sulawesi Tenggara', 'Sulawesi Barat', 'Gorontalo', 'Maluku', 'Maluku Utara',
+                     'Papua', 'Nusa Tenggara Timur', 'Nusa Tenggara Barat', 'Lampung', 'Bengkulu',
+                     'Jambi', 'Aceh', 'Bangka Belitung']:
+            if prov in text:
+                region = prov
+                break
+        return city, region
+
+    async def _shodan(self, ip: str) -> Dict:
+        """Shodan InternetDB (free, no key): open ports, CVEs, tags, hostnames."""
+        try:
+            async with self.session.get(
+                f'https://internetdb.shodan.io/{ip}',
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as r:
+                if r.status == 200:
+                    d = await r.json(content_type=None)
+                    return {
+                        'open_ports': d.get('ports', []),
+                        'hostnames': d.get('hostnames', []),
+                        'tags': d.get('tags', []),
+                        'vulns': d.get('vulns', []),
+                        'cpes': d.get('cpes', []),
+                    }
+                return {'note': f'HTTP {r.status}'}
+        except Exception:
+            return {}
+        return {}
+
+    def _calculate_risk_score(self, data: Dict):
+        """Score from verifiable signals, with honest labeling.
+
+        - verified: Shodan InternetDB scan data (tags, CVEs) — hasil scan nyata.
+        - heuristic: flag ip-api (proxy/hosting) — perkiraan, bisa false positive.
+
+        Returns (score, factors, note).
         """
-        score = 0
-        
-        # Proxy/VPN detection (+30)
+        verified = []
+        heuristic = []
+
+        shodan = data.get('shodan') or {}
+        tags = {str(t).lower() for t in shodan.get('tags', [])}
+        risk_tags = {
+            'vpn', 'tor', 'proxy', 'compromised', 'botnet', 'malware',
+            'spam', 'honeypot', 'scanner', 'mining', 'c2', 'self-signed',
+        }
+        for tag in sorted(risk_tags & tags):
+            verified.append(f'Shodan tag "{tag}" (hasil scan)')
+
+        vulns = shodan.get('vulns', [])
+        if vulns:
+            verified.append(f'{len(vulns)} CVE terdeteksi (Shodan)')
+
         if data.get('is_proxy'):
-            score += 30
-        
-        # Hosting/Data center (+20)
+            heuristic.append('flag proxy/VPN (ip-api — perkiraan)')
         if data.get('is_hosting'):
-            score += 20
-        
-        # Mobile network (+5 - less risky but still dynamic)
-        if data.get('is_mobile'):
-            score += 5
-        
-        # No reverse DNS (+10)
-        if not data.get('reverse_dns'):
-            score += 10
-        
-        # No abuse contact (+15)
-        if not data.get('abuse_contact'):
-            score += 15
-        
-        # Private/unknown ASN (+10)
-        if not data.get('asn'):
-            score += 10
-        
-        # Cap at 100
-        return min(score, 100)
-    
+            heuristic.append('flag datacenter/hosting (ip-api — perkiraan)')
+
+        score = min(100, len(verified) * 25 + len(heuristic) * 10)
+        factors = verified + heuristic
+        if not factors:
+            factors.append('tidak ada sinyal risiko yang terdeteksi')
+
+        note = (f"Skor dihitung dari {len(verified)} sinyal terverifikasi "
+                f"+ {len(heuristic)} indikator perkiraan. Bukan probabilitas serangan.")
+        return score, factors, note
+
     async def bulk_lookup(self, ips: list) -> Dict[str, Dict]:
         """Bulk IP lookup (for multiple IPs)"""
         results = {}
         tasks = [self.scan(ip) for ip in ips]
         scan_results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         for ip, result in zip(ips, scan_results):
             if isinstance(result, dict) and not result.get('error'):
                 results[ip] = result
             else:
                 results[ip] = {'error': str(result) if result else 'Lookup failed'}
-        
+
         return results
-    
+
     def clear_cache(self):
         """Clear the IP lookup cache"""
         self._cache.clear()

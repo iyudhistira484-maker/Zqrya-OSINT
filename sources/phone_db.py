@@ -38,8 +38,6 @@ class PhoneProviderDB:
                 '0881': 'Smartfren', '0882': 'Smartfren', '0883': 'Smartfren',
                 '0884': 'Smartfren', '0885': 'Smartfren', '0886': 'Smartfren',
                 '0887': 'Smartfren', '0888': 'Smartfren', '0889': 'Smartfren',
-                # By.U (Telkomsel)
-                '0859': 'By.U',  # Note: 0859 also Indosat, but By.U is Telkomsel sub-brand
             },
             
             # ==================== USA (1) ====================
@@ -179,37 +177,24 @@ class PhoneProviderDB:
             
             # ==================== PHILIPPINES (63) - NEW ====================
             'PH': {
-                # Globe
-                '917': 'Globe', '918': 'Globe', '919': 'Globe',
-                '920': 'Globe', '921': 'Globe', '922': 'Globe',
-                '923': 'Globe', '924': 'Globe', '925': 'Globe',
-                '926': 'Globe', '927': 'Globe', '928': 'Globe',
-                '929': 'Globe',
-                '905': 'Globe', '906': 'Globe', '907': 'Globe',
-                '915': 'Globe', '916': 'Globe',
-                '956': 'Globe', '957': 'Globe', '958': 'Globe',
-                '959': 'Globe',
-                # Smart
-                '908': 'Smart', '909': 'Smart', '910': 'Smart',
-                '911': 'Smart', '912': 'Smart', '913': 'Smart',
-                '914': 'Smart',
-                '918': 'Smart', '919': 'Smart',
-                '920': 'Smart', '921': 'Smart', '922': 'Smart',
-                '923': 'Smart', '924': 'Smart', '925': 'Smart',
-                '926': 'Smart', '927': 'Smart', '928': 'Smart',
-                '929': 'Smart',
-                '938': 'Smart', '939': 'Smart', '940': 'Smart',
-                '941': 'Smart', '942': 'Smart', '943': 'Smart',
-                '944': 'Smart', '945': 'Smart', '946': 'Smart',
-                '947': 'Smart', '948': 'Smart', '949': 'Smart',
+                # Globe / TM
+                '905': 'Globe/TM', '906': 'Globe/TM', '907': 'Globe/TM',
+                '915': 'Globe/TM', '916': 'Globe/TM', '917': 'Globe/TM',
+                '926': 'Globe/TM', '927': 'Globe/TM', '928': 'Globe/TM', '929': 'Globe/TM',
+                '956': 'Globe/TM', '957': 'Globe/TM', '958': 'Globe/TM', '959': 'Globe/TM',
+                # Smart / TNT
+                '908': 'Smart/TNT', '909': 'Smart/TNT', '910': 'Smart/TNT',
+                '911': 'Smart/TNT', '912': 'Smart/TNT', '913': 'Smart/TNT', '914': 'Smart/TNT',
+                '918': 'Smart/TNT', '919': 'Smart/TNT', '920': 'Smart/TNT', '921': 'Smart/TNT',
+                '938': 'Smart/TNT', '939': 'Smart/TNT', '940': 'Smart/TNT', '941': 'Smart/TNT',
+                '942': 'Smart/TNT', '943': 'Smart/TNT', '944': 'Smart/TNT', '945': 'Smart/TNT',
+                '946': 'Smart/TNT', '947': 'Smart/TNT', '948': 'Smart/TNT', '949': 'Smart/TNT',
+                # Sun (now part of Smart)
+                '922': 'Sun (Smart)', '923': 'Sun (Smart)', '924': 'Sun (Smart)', '925': 'Sun (Smart)',
                 # DITO Telecommunity
                 '991': 'DITO', '992': 'DITO', '993': 'DITO',
                 '994': 'DITO', '995': 'DITO', '996': 'DITO',
                 '997': 'DITO', '998': 'DITO', '999': 'DITO',
-                # Sun Cellular (now part of Smart)
-                '922': 'Smart/Sun', '923': 'Smart/Sun', '924': 'Smart/Sun',
-                '925': 'Smart/Sun', '926': 'Smart/Sun', '927': 'Smart/Sun',
-                '928': 'Smart/Sun', '929': 'Smart/Sun',
             },
         }
     
@@ -228,7 +213,7 @@ class PhoneProviderDB:
         elif country == 'US' and phone.startswith('1'):
             local = phone[1:]
         elif country == 'GB' and phone.startswith('44'):
-            local = '0' + phone[2:]
+            local = phone[2:]
         elif country == 'MY' and phone.startswith('60'):
             local = '0' + phone[2:]
         elif country == 'IN' and phone.startswith('91'):
@@ -238,7 +223,7 @@ class PhoneProviderDB:
         elif country == 'SG' and phone.startswith('65'):
             local = phone[2:]  # Singapore uses 8-digit without leading 0
         elif country == 'PH' and phone.startswith('63'):
-            local = '0' + phone[2:]
+            local = phone[2:]
         else:
             local = phone
         

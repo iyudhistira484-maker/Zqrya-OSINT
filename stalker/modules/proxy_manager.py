@@ -107,11 +107,14 @@ def prepare_client(**kwargs) -> httpx.AsyncClient:
     # Retry transport (retries=3 built into httpx core transport)
     transport = _RetryTransport(retries=3)
 
+    # follow_redirects default True, but allow callers to override it.
+    follow_redirects = kwargs.pop("follow_redirects", True)
+
     return httpx.AsyncClient(
         headers=headers,
         timeout=timeout,
         limits=limits,
         transport=transport,
-        follow_redirects=True,
+        follow_redirects=follow_redirects,
         **kwargs,
     )

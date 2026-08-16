@@ -148,6 +148,19 @@ venv.bak/
 output/
 web/history.json
 
+# Local GeoIP databases (download manual: GeoLite2 / DB-IP Lite)
+data/geoip/
+sources/geoip/
+geoip/
+*.mmdb
+*.mmdb.gz
+*.MMDB
+*.MMDB.gz
+
+# Local SIAK/NPWP CSV databases (letakkan manual — jangan di-commit)
+databaselocal/
+data/localdb/
+
 # Deep pipeline runtime
 .env
 stalker/__pycache__/

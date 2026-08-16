@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import csv
+import os
 
 _CACHE: Dict[str, List[Dict[str, str]]] = {}
 _LOADED = False
@@ -29,9 +30,46 @@ DB_FILES = [
 ]
 
 
+def _get_db_dirs() -> List[Path]:
+    """Kandidat folder DB lokal (urut prioritas).
+
+    1. LOCALDB_DIR dari env/config (jika di-set eksplisit)
+    2. <project>/databaselocal  (default baru — di dalam project)
+    3. <project>/../databaselocal (lokasi lama — di luar project)
+    4. <project>/data/localdb
+    """
+    from ..config import Config, BASE_DIR
+    dirs: List[Path] = []
+
+    env_dir = os.getenv("LOCALDB_DIR", "").strip()
+    if env_dir:
+        dirs.append(Path(env_dir))
+
+    cfg_dir = str(getattr(Config, "LOCALDB_DIR", "") or "")
+    for cand in (cfg_dir,):
+        p = Path(cand) if cand else None
+        if p and p not in dirs:
+            dirs.append(p)
+
+    for cand in (BASE_DIR / "databaselocal", BASE_DIR.parent / "databaselocal",
+                 BASE_DIR / "data" / "localdb"):
+        if cand not in dirs:
+            dirs.append(cand)
+    return dirs
+
+
 def _get_db_dir() -> Path:
-    from ..config import Config
-    return Path(Config.LOCALDB_DIR)
+    """Folder DB lokal pertama yang benar-benar ada (berisi file), atau default."""
+    for d in _get_db_dirs():
+        if d.exists():
+            return d
+    return _get_db_dirs()[0]
+
+
+def db_dir_hint() -> str:
+    """Path folder DB lokal yang dipakai + nama file yang diharapkan."""
+    d = _get_db_dir()
+    return f"{d}  (file: {', '.join(DB_FILES)})"
 
 
 def _load_all() -> Dict[str, List[Dict[str, str]]]:
@@ -40,24 +78,24 @@ def _load_all() -> Dict[str, List[Dict[str, str]]]:
     if _LOADED:
         return _CACHE
 
-    db_dir = _get_db_dir()
-    if not db_dir.exists():
-        _LOADED = True
-        return {}
-
-    for filename in DB_FILES:
-        filepath = db_dir / filename
-        if not filepath.exists():
+    for db_dir in _get_db_dirs():
+        if not db_dir.exists():
             continue
-        try:
-            rows = []
-            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    rows.append({k.strip(): v.strip() if v else "" for k, v in row.items()})
-            _CACHE[filename] = rows
-        except Exception:
-            pass
+        for filename in DB_FILES:
+            if filename in _CACHE:
+                continue
+            filepath = db_dir / filename
+            if not filepath.exists():
+                continue
+            try:
+                rows = []
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        rows.append({k.strip(): v.strip() if v else "" for k, v in row.items()})
+                _CACHE[filename] = rows
+            except Exception:
+                pass
 
     _LOADED = True
     return _CACHE
@@ -113,6 +151,43 @@ def search_by_nik(nik: str) -> Dict[str, List[Dict[str, Any]]]:
             row_nik = row.get("NIK", "").strip()
             if row_nik == nik:
                 results.setdefault(filename, []).append(_extract_row(filename, row))
+    return results
+
+
+def search_by_nkk(nkk: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Cari anggota keluarga by Nomor Kartu Keluarga (NKK).
+
+    Menyisir semua DB yang punya kolom NKK/NO_KK/KK — mengembalikan SEMUA
+    anggota yang berbagi NKK yang sama (kepala keluarga + anggota), lengkap
+    dengan NIK, nama, status kawin, dll.
+    """
+    nkk = nkk.strip()
+    if len(nkk) < 10:
+        return {}
+    results: Dict[str, List[Dict[str, Any]]] = {}
+    dbs = _load_all()
+
+    for filename, rows in dbs.items():
+        # Cari nama kolom NKK di header baris pertama (kalau ada)
+        if not rows:
+            continue
+        nkk_col = None
+        for cand in ("NKK", "NO_KK", "NO.KK", "KK", "NOMOR_KK"):
+            if cand in rows[0]:
+                nkk_col = cand
+                break
+        if not nkk_col:
+            continue
+        matches = []
+        for row in rows:
+            row_nkk = (row.get(nkk_col) or "").strip().replace(" ", "").replace("-", "")
+            if row_nkk == nkk:
+                entry = _extract_row(filename, row)
+                if entry:
+                    entry["nkk"] = _mask_nik(row_nkk)
+                    matches.append(entry)
+        if matches:
+            results[filename] = matches
     return results
 
 

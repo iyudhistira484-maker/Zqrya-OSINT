@@ -50,6 +50,7 @@ class InteractiveShell:
 
     def _print_menu(self):
         items = [
+            # ── CORE SCAN ──
             ("1",  "👤  Username OSINT"),
             ("2",  "📧  Email OSINT"),
             ("3",  "📱  Phone OSINT"),
@@ -58,13 +59,28 @@ class InteractiveShell:
             ("6",  "🕸️  Website Footprint (URL)"),
             ("7",  "🧠  Maigret Deep Search (600+ platforms)"),
             ("8",  "🌑  Dark Web / Breach Check"),
+            # ── PIPELINE ──
             ("9",  "🧬  Username Variants"),
             ("10", "🚀  Combined OSINT (Full Pipeline)"),
             ("11", "📦  Batch Scan"),
-            ("12", "🖥️  Launch Web Dashboard"),
-            ("13", "🕘  History"),
-            ("14", "⚙️   Settings"),
-            ("15", "ℹ️   About / Help"),
+            # ── OSINT TOOLS ──
+            ("12", "🪪  NIK/KTP lookup"),
+            ("13", "📇  NKK / Kartu Keluarga"),
+            ("14", "🔳  QR/barcode decoder"),
+            ("15", "👛  E-wallet OSINT"),
+            ("16", "🟢  Status online checker"),
+            ("17", "📶  Phone HLR lookup"),
+            ("18", "↩️  Reverse email"),
+            ("19", "🎮  Gaming OSINT"),
+            ("20", "📸  IG/TikTok deep"),
+            ("21", "🖧  Exposed device search"),
+            ("22", "📍  Visual geolocation"),
+            # ── SYSTEM ──
+            ("23", "🎯  IP Logger (tracking link)"),
+            ("24", "🖥️  Launch Web Dashboard"),
+            ("25", "🕘  History"),
+            ("26", "⚙️  Settings"),
+            ("27", "ℹ️  About / Help"),
             ("0",  "🚪  Exit"),
         ]
 
@@ -107,6 +123,7 @@ class InteractiveShell:
             ("m <username>",    "Maigret deep search (600+ platforms)"),
             ("dw <target>",     "Dark web / paste / breach check"),
             ("var <username>",  "Generate 150+ username variants"),
+            ("iplogger",        "IP Logger — tangkap IP target via link"),
             ("full <target>", "Combined OSINT (Full Pipeline)"),
             ("batch <file>",    "Batch scan targets from file"),
         ]
@@ -436,6 +453,77 @@ class InteractiveShell:
         except Exception as e:
             console.print(f"[red]❌ Web error: {e}[/red]")
 
+    # ─────────────────────────── IP logger ───────────────────────────
+    async def _run_iplogger(self):
+        from stalker.modules.ip_logger import run_ip_logger
+        from stalker.reporters import terminal as term
+
+        console.print("\n[bold violet]🎯 IP LOGGER — tangkap IP target saat mereka klik link[/bold violet]")
+        console.print("[dim]  [1] Redirect + LIVE — redirect ke URL, tetap ping tiap 15s sambil terbuka[/dim]")
+        console.print("[dim]  [2] Halaman HTML custom[/dim]")
+        console.print("[dim]  [3] Pixel 1x1 (email tracking)[/dim]")
+        console.print()
+        choice = Prompt.ask("[cyan]Pilih decoy[/cyan]", choices=["1", "2", "3"], default="1")
+
+        redirect_url = None
+        page_html = None
+        pixel = False
+        live = False
+        if choice == "1":
+            live = True
+            redirect_url = Prompt.ask("[cyan]URL redirect[/cyan]").strip() or \
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        elif choice == "2":
+            page_html = Prompt.ask("[cyan]HTML (kosong = default 'Loading…')[/cyan]").strip() or (
+                "<!doctype html><html><body style='background:#000;color:#fff;"
+                "font-family:sans-serif;display:flex;align-items:center;"
+                "justify-content:center;height:100vh;margin:0'>"
+                "<h1>Loading…</h1></body></html>")
+        else:
+            pixel = True
+
+        port_raw = Prompt.ask("[cyan]Port[/cyan]", default="8080").strip()
+        try:
+            port = int(port_raw)
+        except ValueError:
+            port = 8080
+
+        term.print_header("IP LOGGER — TRACKING LINK")
+        console.print()
+        try:
+            await run_ip_logger(port=port, redirect_url=redirect_url,
+                                page_html=page_html, pixel=pixel, live=live,
+                                shorten=True, public_tunnel=True)
+        except OSError as e:
+            console.print(f"[red]❌ Port {port} tidak bisa dipakai: {e}[/red]")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]⚠  Logger dihentikan[/yellow]")
+
+    # ─────────────────────────── new OSINT tools ───────────────────────────
+    def _run_osint_tool(self, key: str, target: str = None):
+        import subprocess
+        tools = {
+            "nik": ("NIK/KTP lookup", "NIK 16 digit", "nik"),
+            "nkk": ("NKK / Kartu Keluarga", "NKK 16 digit", "nkk"),
+            "qr": ("QR/barcode decoder", "path file / URL gambar", "qr"),
+            "ewallet": ("E-wallet OSINT", "nomor HP (08xx)", "ewallet"),
+            "online": ("Status online checker", "username Telegram / nomor HP", "online"),
+            "hlr": ("Phone HLR lookup", "nomor HP", "hlr"),
+            "revemail": ("Reverse email", "alamat email", "revemail"),
+            "gaming": ("Gaming OSINT", "username", "gaming"),
+            "social": ("IG/TikTok deep", "username", "social"),
+            "device": ("Exposed device search", "alamat IP", "device"),
+            "geolocate": ("Visual geolocation", "path file / URL gambar", "geolocate"),
+        }
+        label, hint, cmd = tools[key]
+        if not target:
+            target = Prompt.ask(f"[cyan]{label} — target ({hint})[/cyan]").strip()
+        if not target:
+            console.print("[yellow]⚠  Cancelled[/yellow]")
+            return
+        console.print()
+        subprocess.run([sys.executable, "-m", "stalker.cli", cmd, target])
+
     # ─────────────────────────── main loop ───────────────────────────
     async def run(self):
         clear_screen()
@@ -469,7 +557,7 @@ class InteractiveShell:
                 break
 
             # ── help / menu / clear / version ──
-            if low in ("help", "?", "15"):
+            if low in ("help", "?", "27"):
                 self._print_help()
             elif low in ("menu", "home"):
                 console.print()
@@ -520,12 +608,40 @@ class InteractiveShell:
                     path = Prompt.ask("[cyan]Batch file path[/cyan]")
                     await self._run_batch(path.strip())
 
+            # ── IP logger ──
+            elif low in ("iplogger", "grab", "23"):
+                await self._run_iplogger()
+
             # ── web dashboard ──
-            elif low in ("web", "12"):
+            elif low in ("web", "24"):
                 self._launch_web()
 
+            # ── new OSINT tools ──
+            elif head in ("12", "nik", "ktp"):
+                self._run_osint_tool("nik", rest or None)
+            elif head in ("13", "nkk", "kk"):
+                self._run_osint_tool("nkk", rest or None)
+            elif head in ("14", "qr", "barcode"):
+                self._run_osint_tool("qr", rest or None)
+            elif head in ("15", "ewallet", "gopay", "ovo", "dana"):
+                self._run_osint_tool("ewallet", rest or None)
+            elif head in ("16", "online", "lastseen"):
+                self._run_osint_tool("online", rest or None)
+            elif head in ("17", "hlr"):
+                self._run_osint_tool("hlr", rest or None)
+            elif head in ("18", "revemail", "remail"):
+                self._run_osint_tool("revemail", rest or None)
+            elif head in ("19", "gaming", "game"):
+                self._run_osint_tool("gaming", rest or None)
+            elif head in ("20", "social", "sosmed"):
+                self._run_osint_tool("social", rest or None)
+            elif head in ("21", "device", "exposed"):
+                self._run_osint_tool("device", rest or None)
+            elif head in ("22", "geolocate", "locate"):
+                self._run_osint_tool("geolocate", rest or None)
+
             # ── history ──
-            elif low in ("history", "13"):
+            elif low in ("history", "25"):
                 self._show_history()
             elif head == "again":
                 try:
@@ -534,7 +650,7 @@ class InteractiveShell:
                     console.print("[red]❌ Usage: again <history-number>[/red]")
 
             # ── settings ──
-            elif low in ("settings", "14"):
+            elif low in ("settings", "26"):
                 self._show_settings()
             elif low == "deep":
                 self.deep_mode = not self.deep_mode

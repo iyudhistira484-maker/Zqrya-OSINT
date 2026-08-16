@@ -51,20 +51,59 @@ async def search_person(name: str, categories: List[str] = None) -> Dict[str, Li
     return results
 
 
+# Rotating User-Agent pool (desktop browsers). Rotated per request so search
+# engines can't fingerprint one UA across queries — helps against rate-limits.
+_DORK_UAS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:122.0) Gecko/20100101 Firefox/122.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+]
+
+import random as _random
+
+_UA_INDEX = 0
+
+def _next_ua() -> str:
+    """Round-robin UA rotation across the pool."""
+    global _UA_INDEX
+    ua = _DORK_UAS[_UA_INDEX % len(_DORK_UAS)]
+    _UA_INDEX += 1
+    return ua
+
+
 async def _execute_search(query: str) -> List[Dict[str, str]]:
     """Execute a search query using available backends.
 
-    Strategy: try Google first, fall back to DuckDuckGo if Google fails/returns empty.
+    Strategy: try Google (with proxy rotation if configured), fall back to
+    DuckDuckGo if Google fails/returns empty. Each backend tries up to
+    `1 + len(proxy_list)` attempts (one per proxy + direct) before giving up.
     """
     results = []
 
-    # Try Google first
+    # Try Google first, cycling through proxies when configured.
     if HAS_GOOGLE:
-        results = await _search_google(query)
+        attempts = [None] + (list(Config.DORK_PROXY_LIST) if Config.DORK_PROXY_LIST else [])
+        for proxy in attempts:
+            results = await _search_google(query, proxy=proxy)
+            if results:
+                break
+            await asyncio.sleep(Config.DORK_SLEEP)
 
-    # Fall back to DDG if Google returned nothing or Google not available
+    # Fall back to DDG (also rotates proxy + UA) if Google returned nothing.
     if not results and HAS_DDG:
-        results = await _search_ddg(query)
+        attempts = [None] + (list(Config.DORK_PROXY_LIST) if Config.DORK_PROXY_LIST else [])
+        for proxy in attempts:
+            results = await _search_ddg(query, proxy=proxy)
+            if results:
+                break
+            await asyncio.sleep(Config.DORK_SLEEP)
 
     if not results and not HAS_GOOGLE:
         results = [{"title": "No search engine available. Install: pip install googlesearch-python", "url": "", "snippet": ""}]
@@ -72,13 +111,18 @@ async def _execute_search(query: str) -> List[Dict[str, str]]:
     return results[:Config.DORK_MAX_RESULTS]
 
 
-async def _search_google(query: str) -> List[Dict[str, str]]:
-    """Search via Google."""
+async def _search_google(query: str, proxy: Optional[str] = None) -> List[Dict[str, str]]:
+    """Search via Google (googlesearch-python; rotates UA internally, proxy optional)."""
     loop = asyncio.get_event_loop()
     try:
         raw_results = await loop.run_in_executor(
             None,
-            lambda: list(google_search(query, num_results=Config.DORK_MAX_RESULTS, advanced=True)),
+            lambda: list(google_search(
+                query,
+                num_results=Config.DORK_MAX_RESULTS,
+                advanced=True,
+                proxy=proxy,
+            )),
         )
         return [
             {"title": getattr(r, "title", ""), "url": getattr(r, "url", ""), "snippet": getattr(r, "description", "")}
@@ -88,17 +132,17 @@ async def _search_google(query: str) -> List[Dict[str, str]]:
         return []
 
 
-async def _search_ddg(query: str) -> List[Dict[str, str]]:
-    """Search via DuckDuckGo HTML endpoint using httpx."""
+async def _search_ddg(query: str, proxy: Optional[str] = None) -> List[Dict[str, str]]:
+    """Search via DuckDuckGo HTML endpoint using httpx (rotating UA + optional proxy)."""
     import re
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    }
+    headers = {"User-Agent": _next_ua()}
+    kwargs: Dict[str, Any] = {}
+    if proxy:
+        kwargs["proxy"] = proxy
 
     try:
-        async with prepare_client(timeout=15, follow_redirects=True, headers=headers) as client:
+        async with prepare_client(timeout=15, follow_redirects=True, headers=headers, **kwargs) as client:
             resp = await client.post("https://html.duckduckgo.com/html/", data={"q": query})
             resp.raise_for_status()
 

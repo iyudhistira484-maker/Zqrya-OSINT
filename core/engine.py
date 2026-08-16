@@ -36,11 +36,15 @@ class ZqryaEngine:
         self.correlation = CorrelationEngine()
         self.modules = {}
 
-    async def __aenter__(self):
-        # Gunakan DNS resolver manual dengan nameserver Google
-        resolver = aiohttp.resolver.AsyncResolver(
-            nameservers=['8.8.8.8', '1.1.1.1', '8.8.4.4']
-        )
+    def _build_session(self, use_google_dns: bool = True):
+        """Buat session aiohttp. use_google_dns=True → resolver manual 8.8.8.8;
+        False → DNS sistem (fallback kalau Google DNS diblokir/lambat di jaringan)."""
+        if use_google_dns:
+            resolver = aiohttp.resolver.AsyncResolver(
+                nameservers=['8.8.8.8', '1.1.1.1', '8.8.4.4']
+            )
+        else:
+            resolver = aiohttp.resolver.ThreadedResolver()
 
         connector = aiohttp.TCPConnector(
             limit=self.max_concurrent,
@@ -51,7 +55,15 @@ class ZqryaEngine:
             ttl_dns_cache=300
         )
 
-        self.session = aiohttp.ClientSession(
+        # Accept-Encoding: hanya minta brotli (br) kalau library-nya tersedia,
+        # kalau tidak aiohttp gagal decode → 'Can not decode content-encoding: brotli'
+        try:
+            import brotli  # noqa: F401
+            accept_encoding = 'gzip, deflate, br'
+        except ImportError:
+            accept_encoding = 'gzip, deflate'
+
+        return aiohttp.ClientSession(
             connector=connector,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
             headers={
@@ -60,12 +72,19 @@ class ZqryaEngine:
                               'Chrome/124.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
+                'Accept-Encoding': accept_encoding,
                 'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
         )
+
+    async def __aenter__(self):
+        # Session utama: DNS resolver manual Google. Kalau jaringan memblokir
+        # DNS Google (8.8.8.8), request gagal → investigate() retry pakai
+        # session cadangan dengan DNS sistem (ThreadedResolver).
+        self.session = self._build_session(use_google_dns=True)
+        self._fallback_session = self._build_session(use_google_dns=False)
 
         self.modules = {
             'username': UsernameModule(self.session),
@@ -80,8 +99,9 @@ class ZqryaEngine:
         return self
 
     async def __aexit__(self, *args):
-        if self.session and not self.session.closed:
-            await self.session.close()
+        for s in (self.session, getattr(self, '_fallback_session', None)):
+            if s and not s.closed:
+                await s.close()
 
     async def investigate(self, target: str, target_type: str = None) -> Dict:
         """Single-module investigation"""
@@ -98,26 +118,52 @@ class ZqryaEngine:
             console.print(f"[red]❌ No module for type: {target_type}[/red]")
             return {}
 
-        try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                transient=True, console=console
-            ) as progress:
-                progress.add_task(description=f"Running {target_type} scan…", total=None)
-                result = await module.scan(target)
-            if result and not result.get('error'):
+        # Retry sekali dengan DNS sistem kalau scan gagal (Google DNS diblokir)
+        self._last_fallback = False
+        for attempt in range(2):
+            try:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    transient=True, console=console
+                ) as progress:
+                    progress.add_task(description=f"Running {target_type} scan…", total=None)
+                    if attempt == 0:
+                        result = await module.scan(target)
+                    else:
+                        # Ganti session modul ke session cadangan (DNS sistem)
+                        for m in self.modules.values():
+                            m.session = self._fallback_session
+                        result = await module.scan(target)
+                        self._last_fallback = True
+            except Exception as e:
+                result = {'error': str(e)}
+                break
+
+            # Error bisa di top-level (error_result) ATAU di dalam data['error']
+            # (create_result dengan data sebagian gagal) — tampilkan keduanya.
+            data_err = None
+            if result:
+                data_err = (result.get('data') or {}).get('error')
+            err_msg = None
+            if result and result.get('error'):
+                err_msg = result['error']
+            elif result and data_err:
+                err_msg = data_err
+
+            if result and result.get('data') and not data_err:
                 self.results[target_type] = result
                 return result
-            elif result and result.get('error'):
-                console.print(f"[red]❌ {result['error']}[/red]")
-                return result
+
+            # Gagal karena error → retry sekali dengan DNS sistem kalau belum
+            if attempt == 0 and err_msg and not self._last_fallback:
+                continue
+            if err_msg:
+                console.print(f"[red]❌ {err_msg}[/red]")
             else:
                 console.print("[red]❌ No results[/red]")
-                return {}
-        except Exception as e:
-            console.print(f"[red]❌ Error: {e}[/red]")
-            return {}
+            return result if result else {}
+        return {}
 
     async def investigate_all(self, target: str, target_type: str = None) -> Dict[str, Any]:
         """Multi-module deep investigation"""
@@ -271,6 +317,9 @@ class ZqryaEngine:
             lines.append(self._bullet(p['platform'], p['url']))
         if len(found) > 15:
             lines.append(f"  [dim]… and {len(found)-15} more[/dim]")
+        wb = d.get('wayback') or {}
+        if wb.get('total_archived'):
+            lines.append(f"[dim]📼 Wayback: {wb['total_archived']} platform punya arsip lama[/dim]")
         self._show_result_card("👤 USERNAME OSINT", lines, "violet")
 
     def _show_email(self, d):
@@ -284,18 +333,89 @@ class ZqryaEngine:
             self._kv("Gravatar", '[green]✓ Has profile[/green]' if d.get('gravatar') else 'Not found'),
             self._kv("Website", '[green]✓ ' + str(d.get('website_url','')) + '[/green]' if d.get('has_website') else '[red]No website[/red]'),
         ]
-        if d.get('breach_hint'):
-            lines.append(self._kv("Breach hint", f"[yellow]{d['breach_hint']}[/yellow]"))
+        bi = d.get('breach_info') or {}
+        if bi.get('has_breaches'):
+            found_in = ', '.join(bi.get('sources_found', [])) or '—'
+            lines.append(self._kv("Breach", f"[red]⚠ Ditemukan: {found_in}[/red]"))
+            if bi.get('hudson_rock_infections'):
+                lines.append(self._kv("Infostealer", f"[red]{bi['hudson_rock_infections']} infeksi (Hudson Rock)[/red]"))
+        else:
+            lines.append(self._kv("Breach", "[green]✓ Tidak ditemukan (sumber publik)[/green]"))
+        if bi.get('note'):
+            lines.append(self._kv("Catatan", f"[dim]{bi['note']}[/dim]"))
+        dc = bi.get('domain_context') or {}
+        if dc.get('has_known_breaches'):
+            lines.append(self._kv("Riwayat domain", f"[dim]{dc['total_breaches']} breach historis (bukan akun ini)[/dim]"))
+
+        # ── Attribution: siapa di balik email ini ──
+        att = d.get('attribution') or {}
+        if att.get('display_name'):
+            src = att.get('name_source') or 'gravatar'
+            lines.append(self._kv("Nama", f"[bold yellow]{att['display_name']}[/bold yellow] [dim](profil {src})[/dim]"))
+        if att.get('real_name'):
+            rsrc = att.get('real_name_source') or 'sumber publik'
+            lines.append(self._kv("Nama asli", f"[bold green]{att['real_name']}[/bold green] [dim]({rsrc})[/dim]"))
+        gh = att.get('github') or {}
+        gp = gh.get('profile') or {}
+        gh_commits = gh.get('commits') or []
+        if gp.get('name') or gh_commits:
+            bits = []
+            if gp.get('name'):
+                bits.append(f"profil: {gp['name']}")
+            if gh_commits:
+                bits.append(f"{len(gh_commits)} commit atas email ini")
+            lines.append(self._kv("GitHub", f"[cyan]{'; '.join(bits)}[/cyan]"))
+        kb = att.get('keybase') or {}
+        if kb.get('full_name'):
+            proofs = kb.get('proofs') or []
+            bits = [kb['full_name']]
+            if proofs:
+                bits.append(f"{len(proofs)} proof: {', '.join(p.get('type','') for p in proofs[:4])}")
+            lines.append(self._kv("Keybase", f"[cyan]{' · '.join(bits)}[/cyan]"))
+        if att.get('preferred_username') and att['preferred_username'] != d.get('username'):
+            lines.append(self._kv("Username", f"[cyan]{att['preferred_username']}[/cyan]"))
+        if att.get('location'):
+            lines.append(self._kv("Lokasi", att['location']))
+        if att.get('gravatar_accounts'):
+            accs = ', '.join(f"{a.get('domain')}/{a.get('shortname')}" for a in att['gravatar_accounts'][:6])
+            lines.append(self._kv("Akun linked", f"[cyan]{accs}[/cyan]"))
+        if att.get('platforms_registered'):
+            plats = ', '.join(att['platforms_registered'][:12])
+            more = f" +{len(att['platforms_registered'])-12}" if len(att['platforms_registered']) > 12 else ""
+            lines.append(self._kv("Terdaftar di", f"[green]{len(att['platforms_registered'])} platform[/green]: {plats}{more}"))
+        conf = att.get('confidence')
+        if conf and conf != 'none':
+            color = 'green' if conf == 'high' else ('yellow' if conf == 'medium' else 'dim')
+            ev = len(att.get('evidence', []))
+            lines.append(self._kv("Keyakinan", f"[{color}]{conf}[/{color}] [dim]({ev} sinyal terverifikasi)[/dim]"))
+        if att.get('note'):
+            lines.append(self._kv("Catatan", f"[dim]{att['note']}[/dim]"))
+        reg = d.get('domain_registrant') or {}
+        if reg.get('has_registrant'):
+            ents = reg.get('entities') or []
+            first = ents[0] if ents else {}
+            rname = first.get('name') or first.get('org') or '—'
+            lines.append(self._kv("Registrant", f"[cyan]{rname}[/cyan] [dim](RDAP domain)[/dim]"))
+
         self._show_result_card("📧 EMAIL OSINT", lines, "magenta")
 
     def _show_phone(self, d):
+        provider = d.get('provider') or 'Unknown'
+        prov_src = d.get('provider_source')
+        if prov_src == 'prefix':
+            provider += ' [dim](perkiraan prefix)[/dim]'
+        elif prov_src == 'carrier':
+            provider += ' [dim](data carrier)[/dim]'
+        location = d.get('location') or '—'
+        if location != '—':
+            location += ' [dim](perkiraan area)[/dim]'
         lines = [
             f"[bold violet]📱 Phone:[/bold violet] [yellow]{d.get('input')}[/yellow]",
             self._kv("International", f"[green]{d.get('international')}[/green]"),
             self._kv("Country", f"{d.get('country')} ({d.get('country_iso')})"),
-            self._kv("Provider", f"[cyan]{d.get('provider','Unknown')}[/cyan]"),
+            self._kv("Provider", f"[cyan]{provider}[/cyan]"),
             self._kv("Type", d.get('line_type')),
-            self._kv("Location", d.get('location') or '—'),
+            self._kv("Location", location),
             self._kv("Timezone", ', '.join(d.get('timezones',[])[:2]) or '—'),
             self._kv("Mobile", '[green]Yes[/green]' if d.get('is_mobile') else 'No'),
         ]
@@ -303,6 +423,11 @@ class ZqryaEngine:
             lines.append(self._kv("WhatsApp", f"[green]{d['whatsapp_link']}[/green]"))
         if d.get('telegram_link'):
             lines.append(self._kv("Telegram", f"[green]{d['telegram_link']}[/green]"))
+        if d.get('provider_note'):
+            lines.append(self._kv("Catatan", f"[dim]{d['provider_note']}[/dim]"))
+        if d.get('verified_handles'):
+            hs = ', '.join(f"{h['handle']} ({h['platform']})" for h in d['verified_handles'][:5])
+            lines.append(self._kv("Handle", f"[cyan]{hs}[/cyan] [dim](ada profil ≠ milik nomor)[/dim]"))
         self._show_result_card("📱 PHONE OSINT", lines, "green")
 
     def _show_domain(self, d):
@@ -351,10 +476,30 @@ class ZqryaEngine:
             self._kv("Hosting", '[yellow]Yes (datacenter)[/yellow]' if d.get('is_hosting') else 'No'),
             self._kv("Mobile ISP", '[cyan]Yes[/cyan]' if d.get('is_mobile') else 'No'),
         ]
+        if d.get('isp_registered'):
+            ir = d['isp_registered']
+            loc = ', '.join(x for x in (ir.get('city'), ir.get('region')) if x)
+            lines.append(self._kv("Kantor ISP", f"[cyan]{ir.get('name','')} — {loc} (RDAP {ir.get('asn')}) [dim](bukan lokasi IP)[/dim][/cyan]"))
+        if d.get('geo_confidence'):
+            gc = d['geo_confidence']
+            gcolor = 'green' if gc == 'high' else ('yellow' if gc == 'medium' else 'red')
+            gtxt = f"[{gcolor}]{gc}[/{gcolor}]"
+            if d.get('geo_disagreement'):
+                gtxt += " [red]⚠ sumber beda pendapat[/red]"
+            gtxt += f" [dim]({len(d.get('geo_sources', []))} sumber)[/dim]"
+            lines.append(self._kv("Geo conf", gtxt))
+        if d.get('geo_note'):
+            lines.append(self._kv("Geo note", f"[dim]{d['geo_note']}[/dim]"))
         if d.get('rdap',{}).get('organization'):
             lines.append(self._kv("RIR Org", d['rdap']['organization']))
         if d.get('abuse_contact'):
             lines.append(self._kv("Abuse", f"[yellow]{d['abuse_contact']}[/yellow]"))
+        if d.get('risk_factors'):
+            lines.append(self._kv("Indikator", f"[yellow]{', '.join(d['risk_factors'][:4])}[/yellow]"))
+        if d.get('risk_note'):
+            lines.append(self._kv("Catatan", f"[dim]{d['risk_note']}[/dim]"))
+        if d.get('shodan', {}).get('open_ports'):
+            lines.append(self._kv("Ports", f"[cyan]{', '.join(map(str, d['shodan']['open_ports'][:10]))}[/cyan]"))
         self._show_result_card("🌍 IP OSINT", lines, "yellow")
 
     def _show_maigret(self, d):
@@ -400,7 +545,7 @@ class ZqryaEngine:
             self._kv("Tech", f"[cyan]{', '.join(d.get('technologies',[])[:8]) or '—'}[/cyan]"),
         ]
         if d.get('description'):
-            lines.append(self._kv("Desc", d['description'][:80]))
+            lines.append(self._kv("Desc", d['description'][:300]))
         if d.get('emails'):
             lines.append(self._kv("Emails", f"[green]{', '.join(d['emails'][:5])}[/green]"))
         if d.get('social_links'):

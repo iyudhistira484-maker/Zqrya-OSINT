@@ -799,18 +799,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                 <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
                                     <span class="tag danger">{{ value.risk_level|upper }}</span>
                                     <span class="tag warning">Risk Score: {{ value.risk_score }}/100</span>
-                                    <span class="tag info">{{ value.total_breaches }} Breaches</span>
+                                    <span class="tag info">{{ value.sources_found|length }} sumber breach</span>
                                 </div>
                                 <div class="progress" style="margin-bottom: 12px;">
                                     <div class="progress-bar" style="width: {{ value.risk_score }}%; background: linear-gradient(90deg, var(--accent-red), var(--accent-yellow));"></div>
                                 </div>
                                 <p><strong>{{ value.message }}</strong></p>
-                                {% if value.username_may_be_affected %}
-                                <div class="tag warning" style="margin: 8px 0;">⚠️ Username/Email may be affected</div>
+                                {% if value.sources_found %}
+                                <p style="font-size: 12px;">Sumber terverifikasi: {{ value.sources_found|join(', ') }}</p>
+                                {% endif %}
+                                {% if value.hudson_rock_infections %}
+                                <div class="tag warning" style="margin: 8px 0;">🦠 {{ value.hudson_rock_infections }} infeksi infostealer (Hudson Rock)</div>
                                 {% endif %}
                                 
                                 <details style="margin-top: 12px;">
-                                    <summary style="cursor: pointer; color: var(--accent-cyan);">📋 View breach details ({{ value.breaches|length }})</summary>
+                                    <summary style="cursor: pointer; color: var(--accent-cyan);">📋 Riwayat breach domain ({{ value.breaches|length }})</summary>
                                     <div style="margin-top: 10px;">
                                         {% for breach in value.breaches %}
                                         <div class="breach-detail">
@@ -824,6 +827,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                     </div>
                                 </details>
                                 
+                                {% if value.note %}
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">ℹ️ {{ value.note }}</p>
+                                {% endif %}
+                                {% if value.evidence %}
+                                <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">Bukti terverifikasi: {% for e in value.evidence %}• {{ e }} {% endfor %}</div>
+                                {% endif %}
                                 <div class="recommendation-box">
                                     <strong>🔒 Recommendation:</strong><br>
                                     {{ value.recommendation }}
@@ -831,6 +840,60 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             </div>
                         </div>
                         
+                        {# ===== ATTRIBUTION (EMAIL MODULE) ===== #}
+                        {% elif key == 'attribution' and value and (value.display_name or value.real_name or value.github or value.keybase or value.platforms_registered or value.gravatar_accounts) %}
+                        <div class="data-item full-width">
+                            <div class="data-label">👤 ATRIBUSI (kemungkinan pemilik)</div>
+                            <div class="data-value">
+                                {% if value.display_name %}
+                                <div style="font-size: 1.1rem; margin-bottom: 4px;"><strong>{{ value.display_name }}</strong> <span style="font-size: 11px; color: var(--text-muted);">(profil Gravatar)</span></div>
+                                {% endif %}
+                                {% if value.real_name %}
+                                <div style="font-size: 1.05rem; font-weight: 600; margin: 2px 0;"><strong>{{ value.real_name }}</strong> <span style="font-size: 11px; color: var(--text-muted);">({{ value.real_name_source or 'sumber publik' }})</span></div>
+                                {% endif %}
+                                {% if value.github.profile.name or value.github.commits %}
+                                <div style="font-size: 12px;">GitHub: <span class="tag info">{{ value.github.profile.name }}{% if value.github.commits %} · {{ value.github.commits|length }} commit atas email ini{% endif %}</span></div>
+                                {% endif %}
+                                {% if value.keybase.full_name %}
+                                <div style="font-size: 12px;">Keybase: <span class="tag info">{{ value.keybase.full_name }}{% if value.keybase.proofs %} · {{ value.keybase.proofs|length }} proof{% endif %}</span></div>
+                                {% endif %}
+                                {% if value.preferred_username %}
+                                <div style="font-size: 12px;">Username: <span class="tag info">{{ value.preferred_username }}</span></div>
+                                {% endif %}
+                                {% if value.location %}
+                                <div style="font-size: 12px;">📍 {{ value.location }}</div>
+                                {% endif %}
+                                {% if value.about %}
+                                <p style="font-size: 12px; color: var(--text-muted);">💬 {{ value.about }}</p>
+                                {% endif %}
+                                {% if value.gravatar_accounts %}
+                                <div style="margin: 8px 0;">
+                                    <div style="font-size: 12px; font-weight: 600;">Akun terhubung (Gravatar):</div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                                        {% for acc in value.gravatar_accounts[:12] %}
+                                        <a href="{{ acc.url }}" target="_blank" class="platform-tag">{{ acc.domain }}/{{ acc.shortname }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if value.platforms_registered %}
+                                <div style="margin: 8px 0;">
+                                    <div style="font-size: 12px; font-weight: 600;">Email terdaftar di {{ value.platforms_registered|length }} platform:</div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                                        {% for p in value.platforms_registered[:20] %}
+                                        <span class="tag success">{{ p }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if value.confidence and value.confidence != 'none' %}
+                                <div style="margin-top: 6px;"><span class="tag {{ 'danger' if value.confidence == 'high' else 'info' }}">Keyakinan: {{ value.confidence }}</span> <span style="font-size: 11px; color: var(--text-muted);">({{ value.evidence|length }} sinyal terverifikasi)</span></div>
+                                {% endif %}
+                                {% if value.note %}
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">⚠️ {{ value.note }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
                         {# ===== PLATFORM CATEGORIES (USERNAME MODULE) ===== #}
                         {% elif key == 'by_category' and value %}
                         <div class="data-item full-width">
@@ -891,11 +954,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             <div class="data-value 
                                 {%- if key in ['valid', 'has_website', 'is_mobile', 'is_global'] %} 
                                     {%- if value %} success{% else %} danger{% endif %}
-                                {%- elif key in ['risk_score', 'breach_risk'] %}
-                                    {%- if value > 70 %} danger
-                                    {%- elif value > 40 %} warning
-                                    {%- else %} success
-                                    {%- endif %}
+
                                 {%- endif %}">
                                 
                                 {% if value is string %}
@@ -926,8 +985,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                                 {% if item.platform %}
                                                     <strong>{{ item.platform }}:</strong>
                                                     <a href="{{ item.url }}" target="_blank">{{ item.url|truncate(50) }}</a>
-                                                    {% if item.profile_name %}
-                                                        <br><small>📝 {{ item.profile_name }}</small>
+                                                    {% if item.page_title %}
+                                                        <br><small>📝 judul halaman: {{ item.page_title }}</small>
                                                     {% endif %}
                                                     
                                                 {% elif item.exchange %}

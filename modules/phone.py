@@ -3,6 +3,7 @@
 """Zqrya v3.0 - Phone Module (upgraded)"""
 
 import re
+import asyncio
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone as pn_tz
 from typing import Dict, List, Optional
@@ -59,18 +60,31 @@ class PhoneModule(BaseModule):
             if location == country_name:
                 location = None
 
-            # Provider detection
+            # Provider detection (real via libphonenumber, fallback to prefix DB)
+            provider_source = 'unknown'
             prov = carrier.name_for_number(parsed, "en")
-            if not prov and country_iso:
+            if prov:
+                provider_source = 'carrier'
+            elif country_iso:
                 # Clean E.164 for provider DB lookup
                 clean_number = e164.lstrip('+')
                 prov = self.provider_db.get_provider(clean_number, country_iso)
+                if prov:
+                    provider_source = 'prefix'
             
             # Special handling for some providers
             if prov:
                 # Clean up provider names
                 prov = prov.replace('Mobile', '').strip()
                 prov = prov.replace('Pvt Ltd', '').strip()
+
+            # Catatan kejujuran sumber provider
+            if provider_source == 'prefix':
+                provider_note = 'Perkiraan dari prefix — bisa salah karena portabilitas nomor.'
+            elif provider_source == 'unknown':
+                provider_note = 'Provider tidak diketahui.'
+            else:
+                provider_note = None
 
             # Line type
             num_type = phonenumbers.number_type(parsed)
@@ -102,6 +116,7 @@ class PhoneModule(BaseModule):
             # Possible social handles
             digits_only = re.sub(r'\D', '', e164)
             possible_handles = self._make_handles(digits_only, country_iso)
+            verified_handles = await self._verify_handles(possible_handles[:5])
 
             data = {
                 'input': phone,
@@ -114,6 +129,9 @@ class PhoneModule(BaseModule):
                 'country_iso': country_iso,
                 'location': location,
                 'provider': prov or 'Unknown',
+                'provider_source': provider_source,  # carrier | prefix | unknown
+                'provider_note': provider_note,
+                'handle_note': 'verified_handles = profil publik ada, BUKAN bukti milik nomor ini.',
                 'line_type': line_type,
                 'is_mobile': is_mobile,
                 'timezones': tz,
@@ -122,6 +140,7 @@ class PhoneModule(BaseModule):
                 'whatsapp_link': wa_link,
                 'telegram_link': tg_link,
                 'possible_handles': possible_handles,
+                'verified_handles': verified_handles,
                 'formats': {
                     'e164': e164,
                     'international': international,
@@ -133,7 +152,7 @@ class PhoneModule(BaseModule):
 
             sources = ['phonenumbers-lib']
             if prov and prov != 'Unknown':
-                sources.append('provider_db')
+                sources.append('provider_db' if provider_source == 'prefix' else 'carrier-lib')
             
             return self.create_result(phone, data, sources)
 
@@ -188,6 +207,25 @@ class PhoneModule(BaseModule):
         
         return handles[:10]  # Return top 10 variations
     
+    async def _verify_handles(self, handles: List[str]) -> List[Dict]:
+        """Check whether a handle string has an existing public profile (real existence).
+
+        NOTE: existence does NOT prove the handle belongs to this phone number.
+        """
+        verified = []
+        tasks = []
+        metas = []
+        for h in handles:
+            for platform, url_tpl in (('telegram', 'https://t.me/{}'),
+                                      ('github', 'https://github.com/{}')):
+                tasks.append(self.check_profile_exists(h, url_tpl.format(h), platform))
+                metas.append((h, platform))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for (h, platform), r in zip(metas, results):
+            if r is True:
+                verified.append({'handle': h, 'platform': platform})
+        return verified
+
     def get_country_info(self, country_iso: str) -> Dict:
         """Get additional country-specific info"""
         country_info = {

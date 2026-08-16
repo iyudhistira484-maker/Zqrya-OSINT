@@ -1,7 +1,7 @@
 """IP Tracker & Threat Intelligence Module.
 
 Features:
-- IP geolocation (ip-api.com - free, no key)
+- IP geolocation (konsensus 8 sumber: 3 DB lokal + 5 API online + resolver wilayah — free, no key)
 - ASN / ISP info
 - Threat intelligence (AbuseIPDB public check)
 - Reverse DNS lookup
@@ -18,6 +18,7 @@ import socket
 import ipaddress
 import httpx
 from .proxy_manager import prepare_client
+from .ip_intel import reverse_ip_lookup, check_cins_army
 
 
 IP_RE = re.compile(
@@ -43,40 +44,45 @@ def is_private(ip: str) -> bool:
 
 
 async def geolocate(ip: str) -> Dict[str, Any]:
-    """Geolocate IP via ip-api.com (free, 45 req/min, no key needed)."""
+    """Geolocate IP via konsensus 8 sumber (3 DB lokal + 5 API online + resolver wilayah)."""
     if is_private(ip):
         return {"ip": ip, "private": True, "country": "LAN", "error": "Private IP"}
     try:
+        from modules.geoip_consensus import geolocate as _geo
+
         async with prepare_client(timeout=10) as c:
-            fields = "status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,mobile,proxy,hosting,query"
-            r = await c.get(f"http://ip-api.com/json/{ip}?fields={fields}")
-            if r.status_code == 200:
-                data = r.json()
-                if data.get("status") == "success":
-                    return {
-                        "ip": ip,
-                        "country": data.get("country", ""),
-                        "country_code": data.get("countryCode", ""),
-                        "region": data.get("regionName", ""),
-                        "city": data.get("city", ""),
-                        "zip": data.get("zip", ""),
-                        "lat": data.get("lat"),
-                        "lon": data.get("lon"),
-                        "timezone": data.get("timezone", ""),
-                        "isp": data.get("isp", ""),
-                        "org": data.get("org", ""),
-                        "asn": data.get("as", ""),
-                        "as_name": data.get("asname", ""),
-                        "reverse_dns": data.get("reverse", ""),
-                        "is_mobile": data.get("mobile", False),
-                        "is_proxy": data.get("proxy", False),
-                        "is_hosting": data.get("hosting", False),
-                        "map_url": f"https://www.google.com/maps?q={data.get('lat')},{data.get('lon')}",
-                    }
-                return {"ip": ip, "error": data.get("message", "failed")}
+            async def get_json(url: str):
+                r = await c.get(url)
+                if r.status_code == 200:
+                    return r.json()
+                return None
+
+            g = await _geo(ip, get_json)
+        if not g:
+            return {"ip": ip, "error": "no response"}
+        return {
+            "ip": ip,
+            "country": g.get("country", ""),
+            "country_code": g.get("country_code", ""),
+            "region": g.get("region", ""),
+            "city": g.get("city", ""),
+            "zip": g.get("zip", ""),
+            "lat": g.get("lat"),
+            "lon": g.get("lon"),
+            "timezone": g.get("timezone", ""),
+            "isp": g.get("isp", ""),
+            "org": g.get("org", ""),
+            "asn": g.get("asn", ""),
+            "as_name": g.get("asn_name", ""),
+            "is_mobile": g.get("is_mobile", False),
+            "is_proxy": g.get("is_proxy", False),
+            "is_hosting": g.get("is_hosting", False),
+            "geo_confidence": g.get("geo_confidence"),
+            "geo_note": g.get("geo_note", ""),
+            "map_url": f"https://www.google.com/maps?q={g.get('lat')},{g.get('lon')}" if g.get('lat') else "",
+        }
     except Exception as e:
         return {"ip": ip, "error": str(e)}
-    return {"ip": ip, "error": "no response"}
 
 
 async def reverse_dns(ip: str) -> str:
@@ -132,16 +138,20 @@ def extract_ips_from_text(text: str) -> List[str]:
 
 
 async def track_ip(ip: str) -> Dict[str, Any]:
-    """Full IP investigation: geo + shodan + reverse DNS."""
-    geo_task = geolocate(ip)
-    shodan_task = check_shodan_free(ip)
-    geo, shodan = await asyncio.gather(geo_task, shodan_task, return_exceptions=True)
+    """Full IP investigation: geo + shodan + reverse DNS + reverse IP + threat."""
+    geo, shodan, reverse_ip, threat = await asyncio.gather(
+        geolocate(ip), check_shodan_free(ip), reverse_ip_lookup(ip),
+        check_cins_army(ip), return_exceptions=True)
 
     result = {"ip": ip}
     if isinstance(geo, dict):
         result.update(geo)
     if isinstance(shodan, dict) and shodan:
         result["shodan"] = shodan
+    if isinstance(reverse_ip, dict) and reverse_ip:
+        result["reverse_ip"] = reverse_ip
+    if isinstance(threat, dict) and threat:
+        result["threat"] = threat
 
     rdns = result.get("reverse_dns", "")
     if not rdns and not is_private(ip):

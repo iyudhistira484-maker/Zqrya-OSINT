@@ -231,6 +231,28 @@ class BaseModule:
             except Exception as e:
                 logger.error(f"{self.name}: Text fetch error for {url}: {e}")
         return None
+
+    async def check_profile_exists(self, handle: str, url: str, platform: str = "") -> bool:
+        """Check whether a handle has an existing public profile (real existence signal).
+
+        NOTE: existence does NOT prove the handle belongs to the target.
+        """
+        try:
+            async with self.session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=6),
+                allow_redirects=True,
+                ssl=False,
+            ) as resp:
+                if resp.status == 200:
+                    if platform == 'github':
+                        return True
+                    text = (await resp.text(errors='ignore')).lower()
+                    if 'tgme_page_title' in text:
+                        return True
+        except Exception:
+            pass
+        return False
     
     def _sanitize_target(self, target: str) -> str:
         """Sanitize target string"""

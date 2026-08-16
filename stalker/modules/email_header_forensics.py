@@ -150,21 +150,46 @@ def find_originating_ip(hops: List[Dict]) -> Optional[str]:
 
 
 async def geolocate_ip(ip: str) -> Dict[str, Any]:
-    """Geolocate IP using ip-api.com (free)."""
+    """Geolocate IP via konsensus 8 sumber (3 DB lokal + 5 API online + resolver wilayah)."""
     if not ip:
         return {}
     try:
+        from modules.geoip_consensus import geolocate as _geo
         from .proxy_manager import prepare_client
+
         async with prepare_client(timeout=10) as c:
-            r = await c.get(
-                f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,"
-                f"regionName,city,isp,org,as,mobile,proxy,hosting,lat,lon",
-            )
-            if r.status_code == 200:
-                d = r.json()
-                if d.get("status") == "success":
-                    return d
-    except Exception as e:
+            async def get_json(url: str):
+                r = await c.get(url)
+                if r.status_code == 200:
+                    return r.json()
+                return None
+
+            g = await _geo(ip, get_json)
+        if not g:
+            return {"ip": ip, "error": "geolocation failed"}
+        # kembalikan dengan key ala ip-api (kompatibel dgn downstream)
+        return {
+            "ip": ip,
+            "status": "success",
+            "country": g.get("country", ""),
+            "countryCode": g.get("country_code", ""),
+            "regionName": g.get("region", ""),
+            "city": g.get("city", ""),
+            "zip": g.get("zip", ""),
+            "lat": g.get("lat"),
+            "lon": g.get("lon"),
+            "timezone": g.get("timezone", ""),
+            "isp": g.get("isp", ""),
+            "org": g.get("org", ""),
+            "as": g.get("asn", ""),
+            "asname": g.get("asn_name", ""),
+            "mobile": g.get("is_mobile", False),
+            "proxy": g.get("is_proxy", False),
+            "hosting": g.get("is_hosting", False),
+            "geo_confidence": g.get("geo_confidence"),
+            "geo_note": g.get("geo_note", ""),
+        }
+    except Exception:
         pass
     return {"ip": ip, "error": "geolocation failed"}
 

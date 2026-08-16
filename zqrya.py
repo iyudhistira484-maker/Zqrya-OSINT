@@ -40,6 +40,14 @@ def parse_arguments():
     parser.add_argument("-m", "--maigret", metavar="USERNAME", help="Deep username search via Maigret (600+ platforms)")
     parser.add_argument("--darkweb", metavar="TARGET", help="Dark web / paste / breach check (email, username, or phone)")
     parser.add_argument("--variants", metavar="USERNAME", help="Generate 150+ username variants")
+    parser.add_argument("--iplogger", action="store_true",
+                        help="Generate a tracking link to capture a target's IP when they click it")
+    parser.add_argument("--redirect", metavar="URL", help="IP logger decoy: redirect target to this URL")
+    parser.add_argument("--page", metavar="HTML", help="IP logger decoy: serve this custom HTML page")
+    parser.add_argument("--pixel", action="store_true", help="IP logger decoy: 1x1 transparent GIF (email tracking)")
+    parser.add_argument("--iplogger-port", type=int, default=8080, help="IP logger local port (default: 8080)")
+    parser.add_argument("--no-shorten", action="store_true", help="Don't shorten the tracking link")
+    parser.add_argument("--local-only", action="store_true", help="Don't expose the tracking server publicly")
     parser.add_argument("--full", metavar="TARGET", help="Combined OSINT investigation (Full Pipeline)")
     parser.add_argument("--maigret-sites", type=int, default=300, help="Max sites for Maigret scan (default: 300)")
     
@@ -251,7 +259,7 @@ async def main_async():
     # Interactive shell (explicit flag, or no arguments at all)
     has_target_args = any([args.username, args.email, args.phone, args.domain, args.ip,
                            args.url, args.maigret, args.darkweb, args.variants,
-                           args.full, args.target, args.batch])
+                           args.iplogger, args.full, args.target, args.batch])
     if args.shell or not has_target_args:
         from core.interactive import InteractiveShell
         shell = InteractiveShell(timeout=args.timeout, threads=args.threads)
@@ -322,6 +330,35 @@ async def main_async():
         for i, v in enumerate(variants, 1):
             console.print(f"  [cyan]{i:>3}.[/cyan] [white]{v}[/white]")
         console.print()
+        return
+
+    # ── IP Logger (tracking link) ──
+    if args.iplogger:
+        from stalker.modules.ip_logger import run_ip_logger
+        from stalker.reporters import terminal as term
+
+        term.print_header("IP LOGGER — TRACKING LINK")
+        console.print()
+        if args.redirect:
+            console.print(f"[dim]  Decoy   : redirect -> {args.redirect}[/dim]")
+        elif args.page:
+            console.print(f"[dim]  Decoy   : custom HTML page ({len(args.page)} chars)[/dim]")
+        else:
+            console.print("[dim]  Decoy   : 1x1 tracking pixel (email)[/dim]")
+        console.print(f"[dim]  Port    : {args.iplogger_port}[/dim]")
+        console.print()
+
+        try:
+            await run_ip_logger(
+                port=args.iplogger_port,
+                redirect_url=args.redirect,
+                page_html=args.page,
+                pixel=args.pixel,
+                shorten=not args.no_shorten,
+                public_tunnel=not args.local_only,
+            )
+        except OSError as e:
+            console.print(f"[red]❌ Port {args.iplogger_port} tidak bisa dipakai: {e}[/red]")
         return
     
     # Batch processing

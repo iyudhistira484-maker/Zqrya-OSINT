@@ -87,14 +87,22 @@ class CorrelationEngine:
             self.entities['username'].add(username)
         
         # Add emails from possible emails
-        for email in data.get('possible_emails', [])[:5]:
-            if '@' in email:
+        # HANYA email terverifikasi (Gravatar/profil publik) yang jadi 'email'.
+        # possible_emails murni tebakan → masuk ke 'possible_email' (label jujur),
+        # supaya tidak tampil seolah-olah nyata di Correlated Intel.
+        verified = data.get('verified_emails', []) or []
+        for v in verified[:5]:
+            email = v.get('email') if isinstance(v, dict) else v
+            if email and '@' in email:
                 self.entities['email'].add(email)
                 domain = email.split('@')[1]
                 self.entities['domain'].add(domain)
-                # Create relationship
                 if username:
-                    self.relationships[f"{username}→{email}"].append('possible_email')
+                    self.relationships[f"{username}→{email}"].append('verified_email')
+
+        for email in data.get('possible_emails', [])[:5]:
+            if email and '@' in email:
+                self.entities['possible_email'].add(email)
         
         # Add platforms and profile names
         for profile in data.get('found', []):
@@ -104,12 +112,6 @@ class CorrelationEngine:
                 if username:
                     self.relationships[f"{username}→{platform}"].append('profile_on')
             
-            # Extract profile name if different from username
-            profile_name = profile.get('profile_name')
-            if profile_name and profile_name != username:
-                self.entities['profile_name'].add(profile_name)
-                if username:
-                    self.relationships[f"{username}→{profile_name}"].append('alias')
         
         # Add categories
         for cat in data.get('categories', []):
@@ -149,6 +151,26 @@ class CorrelationEngine:
         # Add gravatar if exists
         if data.get('gravatar'):
             self.entities['gravatar'].add(data['gravatar'])
+
+        # Add attribution (likely owner)
+        att = data.get('attribution') or {}
+        display_name = att.get('display_name')
+        if display_name:
+            self.entities['real_name'].add(display_name)
+            if email:
+                self.relationships[f"{email}→{display_name}"].append('attributed_to')
+        for acc in att.get('gravatar_accounts', [])[:10]:
+            acc_domain = acc.get('domain')
+            shortname = acc.get('shortname')
+            if acc_domain and shortname:
+                self.entities['platform'].add(acc_domain)
+                self.entities['linked_account'].add(f"{acc_domain}/{shortname}")
+                if email:
+                    self.relationships[f"{email}→{acc_domain}/{shortname}"].append('linked_account')
+        for platform in att.get('platforms_registered', [])[:20]:
+            self.entities['platform'].add(platform)
+            if email:
+                self.relationships[f"{email}→{platform}"].append('registered_on')
     
     def _correlate_phone(self, data: Dict):
         """Extract entities from phone results"""
@@ -359,11 +381,7 @@ class CorrelationEngine:
                 if any(f"{domain}→{ip}" in str(r) for r in self.relationships.values()):
                     self.connections.append(f"{domain} → {ip}")
         
-        # Connect usernames to emails
-        for username in self.entities.get('username', []):
-            for email in self.entities.get('email', []):
-                if username in email:
-                    self.connections.append(f"{username} → {email}")
+
         
         # Connect phones to providers
         for phone in self.entities.get('phone', []):
@@ -376,24 +394,12 @@ class CorrelationEngine:
                 self.connections.append(f"{ip} → {asn}")
     
     def _calculate_confidence(self):
-        """Calculate confidence scores for correlations"""
+        """Confidence hanya dari jumlah koneksi nyata (bukan tebakan)."""
         for entity_type, entities in self.entities.items():
             for entity in entities:
-                # Base confidence
-                base_conf = 0.5
-                
-                # Increase confidence if entity appears in multiple contexts
                 connection_count = len([c for c in self.connections if entity in c])
-                if connection_count > 3:
-                    base_conf += 0.3
-                elif connection_count > 1:
-                    base_conf += 0.15
-                
-                # Check if entity is primary
-                if entity == self._get_primary_entity({}):
-                    base_conf += 0.2
-                
-                self.confidence_scores[entity] = min(base_conf, 1.0)
+                # 0 koneksi = 0 keyakinan; naik seiring koneksi terverifikasi
+                self.confidence_scores[entity] = min(1.0, connection_count * 0.2)
     
     def _build_graph(self) -> Dict[str, List[str]]:
         """Build a graph representation of correlations"""

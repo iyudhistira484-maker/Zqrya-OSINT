@@ -114,6 +114,27 @@ async def check_breachdirectory(term: str) -> Dict[str, Any]:
     return {"found": False, "source": "breachdirectory"}
 
 
+async def check_xposedornot(email: str) -> Dict[str, Any]:
+    """Check XposedOrNot (xonAPI) — gratis, tanpa API key, tanpa signup."""
+    try:
+        async with prepare_client(timeout=15) as c:
+            r = await c.get(f"https://api.xposedornot.com/v1/check-email/{urllib.parse.quote(email)}")
+            if r.status_code == 200:
+                d = r.json()
+                if d.get("status") == "success":
+                    groups = d.get("breaches") or []
+                    names = [b for group in groups for b in group] if groups else []
+                    return {
+                        "found": bool(names),
+                        "count": len(names),
+                        "breaches": names[:20],
+                        "source": "xposedornot",
+                    }
+    except Exception as e:
+        return {"found": False, "source": "xposedornot", "error": str(e)}
+    return {"found": False, "source": "xposedornot"}
+
+
 async def check_leakcheck_free(email: str) -> Dict[str, Any]:
     """Check LeakCheck free public API (limited: source names only)."""
     try:

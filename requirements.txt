@@ -23,5 +23,21 @@ googlesearch-python>=1.2
 pyvis>=0.3.2
 networkx>=2.6.3
 
+# ── EXIF lokal (fallback gratis tanpa EXIFTOOLS_API_KEY) ──
+Pillow>=10.0.0
+
+# ── Brotli (decode Content-Encoding: br — banyak situs pakai, mis. Cloudflare) ──
+brotli>=1.1.0
+
+# ── GeoIP lokal (GeoLite2 / DB-IP Lite, opsional) ──
+maxminddb>=2.0.0
+
 # ── Maigret Engine (600+ platforms, vendored in maigret/) ──
 # Installed via: pip install -e maigret/
+# Deps inti yang dibutuhkan maigret agar bisa import + search:
+alive-progress>=3.2.0
+tqdm>=4.66.0
+aiohttp-socks>=0.10.1
+socid-extractor>=0.0.27
+pycountry>=24.6.1
+html5lib>=1.1

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Zqrya v3.0 - Email Module (with Breach Detection)"""
+"""Zqrya v3.0 - Email Module (with real Breach Detection)"""
 
 import re
+import asyncio
 import hashlib
 import dns.asyncresolver
 import dns.exception
@@ -49,8 +50,8 @@ class EmailModule(BaseModule):
         resolver.timeout = 5
         resolver.lifetime = 8
 
-        # Check for known breaches
-        breach_info = self._check_breaches(domain, username)
+        # Real email-specific breach check + historical domain context
+        breach_info = await self._build_breach_info(email, domain, username)
 
         result = {
             'email': email,
@@ -69,8 +70,8 @@ class EmailModule(BaseModule):
             'disposable': domain in DISPOSABLE,
             'free_provider': domain in FREE_PROVIDERS,
             'possible_usernames': self._gen_usernames(username),
-            'breach_info': breach_info,  # Added breach info
-            'breach_risk': self._calculate_breach_risk(breach_info),  # Risk score
+            'breach_info': breach_info,  # Real email-specific breach info
+            'breach_risk': breach_info.get('risk_score', 0),  # Risk score from real findings
             'timestamp': datetime.now().isoformat()
         }
 
@@ -142,12 +143,28 @@ class EmailModule(BaseModule):
         except Exception:
             pass
 
+        # Attribution: who is behind this email? (public, keyless correlation)
+        result['attribution'] = await self._attribution(email, username)
+
+        # Registrant domain (untuk email domain custom) via RDAP — gratis tanpa key
+        if not result['free_provider'] and not result['disposable']:
+            result['domain_registrant'] = await self._domain_registrant_rdap(domain)
+
         sources = ['dns']
         if result['gravatar']:   sources.append('gravatar')
         if result['mx_records']: sources.append('mx_lookup')
         if result['spf']:        sources.append('spf')
-        if result['breach_info']: sources.append('breach_db')
-        
+        att = result['attribution']
+        if att.get('display_name') or att.get('gravatar_accounts'):
+            sources.append('gravatar_profile')
+        if att.get('platforms_registered'):
+            sources.append('platform_enumeration')
+        bi = result['breach_info']
+        if bi.get('has_breaches'):
+            sources.extend(bi.get('sources_found', []))
+        if bi.get('domain_context', {}).get('has_known_breaches'):
+            sources.append('breach_history_domain')
+
         return self.create_result(email, result, sources)
 
     def _gen_usernames(self, u: str) -> List[str]:
@@ -160,15 +177,186 @@ class EmailModule(BaseModule):
             names += [f'{p}{u}', f'{p}_{u}']
         return list(dict.fromkeys(names))[:12]
 
-    def _check_breaches(self, domain: str, username: str = None) -> Dict:
+    # ─────────────────────── ATTRIBUTION (pemilik) ───────────────────────
+
+    async def _attribution(self, email: str, username: str) -> Dict:
+        """Correlate public, keyless sources to attribute the email to a likely owner.
+
+        Sources:
+        - Gravatar profile JSON (display name, location, linked accounts, phones)
+        - Platform registration enumeration (30+ services, holehe-style)
+
+        NOTE: ini korelasi data publik — BUKAN bukti identitas.
         """
-        Check if domain has known breaches and if username might be affected
-        Returns detailed breach information
+        attrib = {
+            'display_name': None,
+            'preferred_username': None,
+            'location': None,
+            'about': None,
+            'profile_url': None,
+            'gravatar_accounts': [],
+            'gravatar_emails': [],
+            'gravatar_phones': [],
+            'platforms_registered': [],
+            'platforms_checked': 0,
+            'real_name': None,
+            'real_name_source': None,
+            'github': {},
+            'keybase': {},
+            'confidence': 'none',
+            'evidence': [],
+            'name_source': None,
+            'note': '',
+        }
+        try:
+            from stalker.modules.gravatar_lookup import lookup_gravatar
+            from stalker.modules.email_scanner import scan_email
+            from stalker.modules.github_intel import get_profile, search_by_email
+            from stalker.modules.identity_lookup import lookup_keybase, lookup_keybase_by_email
+        except ImportError:
+            return attrib
+
+        gravatar, platform_results, gh_commits, kb_email = await asyncio.gather(
+            lookup_gravatar(email),
+            scan_email(email),
+            search_by_email(email),
+            lookup_keybase_by_email(email),
+            return_exceptions=True,
+        )
+
+        if isinstance(gravatar, dict):
+            attrib['display_name'] = gravatar.get('display_name') or None
+            attrib['preferred_username'] = gravatar.get('preferred_username') or None
+            attrib['location'] = gravatar.get('location') or None
+            attrib['about'] = (gravatar.get('about') or '')[:300] or None
+            attrib['profile_url'] = gravatar.get('profile_url') or None
+            attrib['gravatar_accounts'] = gravatar.get('accounts') or []
+            attrib['gravatar_emails'] = gravatar.get('emails') or []
+            attrib['gravatar_phones'] = gravatar.get('phone_numbers') or []
+
+        registered = []
+        if isinstance(platform_results, list):
+            for r in platform_results:
+                if isinstance(r, dict) and r.get('registered'):
+                    registered.append(r.get('platform'))
+        attrib['platforms_registered'] = sorted(set(registered))
+        attrib['platforms_checked'] = len(platform_results) if isinstance(platform_results, list) else 0
+
+        if not isinstance(gh_commits, list):
+            gh_commits = []
+        if not isinstance(kb_email, dict):
+            kb_email = {'found': False}
+
+        # GitHub profile dari local-part email (kandidat username)
+        gh_profile = {'found': False}
+        kb_user = {'found': False}
+        for cand in self._gen_usernames(username)[:3]:
+            if not gh_profile.get('found'):
+                gh_profile = await get_profile(cand)
+            if not kb_user.get('found'):
+                kb_user = await lookup_keybase(cand)
+        if not isinstance(gh_profile, dict):
+            gh_profile = {'found': False}
+        if not isinstance(kb_user, dict):
+            kb_user = {'found': False}
+
+        kb = kb_user if kb_user.get('found') else kb_email
+        attrib['github'] = {
+            'profile': gh_profile if gh_profile.get('found') else {},
+            'commits': gh_commits[:5],
+        }
+        attrib['keybase'] = kb if kb.get('found') else {}
+
+        # Nama asli terbaik dari sumber terverifikasi
+        real_name = None
+        real_name_source = None
+        if kb.get('full_name'):
+            real_name, real_name_source = kb['full_name'], 'keybase'
+        elif gh_commits and gh_commits[0].get('author_name'):
+            real_name, real_name_source = gh_commits[0]['author_name'], 'github-commit'
+        elif gh_profile.get('name'):
+            real_name, real_name_source = gh_profile['name'], 'github-profile'
+        attrib['real_name'] = real_name
+        attrib['real_name_source'] = real_name_source
+
+        # Confidence dari jumlah sinyal TERVERIFIKASI (bukan probabilitas identitas)
+        n_plat = len(attrib['platforms_registered'])
+        has_name = bool(attrib['display_name'])
+        has_accounts = bool(attrib['gravatar_accounts'])
+        has_real_name = bool(real_name)
+
+        evidence = []
+        if has_name:
+            evidence.append('nama profil Gravatar')
+        if has_accounts:
+            evidence.append(f"{len(attrib['gravatar_accounts'])} akun terhubung (Gravatar)")
+        if n_plat:
+            evidence.append(f"terdaftar di {n_plat} platform")
+        if has_real_name:
+            evidence.append(f"nama asli dari {real_name_source}")
+        if kb.get('proofs'):
+            evidence.append(f"{len(kb['proofs'])} identity proof (Keybase)")
+        if gh_commits:
+            evidence.append(f"{len(gh_commits)} commit GitHub oleh email ini")
+        attrib['evidence'] = evidence
+        attrib['name_source'] = 'gravatar' if has_name else None
+
+        strong = has_real_name and (bool(kb.get('proofs')) or bool(gh_commits) or has_accounts)
+        if strong or (has_name and (has_accounts or n_plat >= 5)):
+            attrib['confidence'] = 'high'
+        elif has_real_name or has_name or n_plat >= 3:
+            attrib['confidence'] = 'medium'
+        elif n_plat > 0 or has_accounts:
+            attrib['confidence'] = 'low'
+
+        attrib['note'] = ('Korelasi data publik — BUKAN bukti identitas. '
+                          'Nama dari Gravatar/Keybase/GitHub bisa alias/palsu; '
+                          'akun/platform hanya menandakan eksistensi.')
+        return attrib
+
+    async def _domain_registrant_rdap(self, domain: str) -> Dict:
+        """Registrant/administrative entity via RDAP untuk domain custom (gratis, tanpa key)."""
+        try:
+            async with self.session.get(
+                f'https://rdap.org/domain/{domain}',
+                timeout=aiohttp.ClientTimeout(total=8),
+                headers={'Accept': 'application/rdap+json'},
+            ) as r:
+                if r.status != 200:
+                    return {'has_registrant': False, 'note': f'HTTP {r.status}'}
+                d = await r.json(content_type=None)
+                entities = []
+                for ent in d.get('entities', []):
+                    roles = ent.get('roles', [])
+                    if 'registrant' not in roles and 'administrative' not in roles:
+                        continue
+                    fields = {}
+                    for f in ent.get('vcardArray', [None, []])[1] or []:
+                        if isinstance(f, list) and len(f) >= 4 and isinstance(f[0], str):
+                            fields[f[0]] = f[3]
+                    entities.append({
+                        'roles': roles,
+                        'handle': ent.get('handle'),
+                        'name': fields.get('fn'),
+                        'org': fields.get('org'),
+                        'email': fields.get('email'),
+                        'address': fields.get('adr'),
+                    })
+                return {'has_registrant': bool(entities), 'entities': entities[:3]}
+        except Exception:
+            return {'has_registrant': False, 'note': 'lookup gagal'}
+        return {'has_registrant': False, 'note': 'no data'}
+
+    # ─────────────────────── BREACH DETECTION ───────────────────────
+
+    def _domain_breach_context(self, domain: str) -> Dict:
+        """Historical breach context for the DOMAIN — NOT specific to this email.
+
+        Kept separate from the live email-specific results so it is never
+        mistaken for "this address was breached".
         """
-        # Search breaches by domain
         domain_breaches = self.breach_db.search_by_domain(domain)
-        
-        # Also search by domain alias (e.g., gmail.com vs google.com)
+
         domain_aliases = {
             'gmail.com': 'Google',
             'google.com': 'Google',
@@ -188,34 +376,18 @@ class EmailModule(BaseModule):
             'jd.id': 'JD.ID',
             'bhinneka.com': 'Bhinneka',
         }
-        
+
         alias = domain_aliases.get(domain)
-        alias_breaches = []
-        if alias:
-            alias_breaches = self.breach_db.search_by_domain(alias)
-        
+        alias_breaches = self.breach_db.search_by_domain(alias) if alias else []
+
         all_breaches = domain_breaches + alias_breaches
-        # Remove duplicates by name
         unique_breaches = {b['name']: b for b in all_breaches}.values()
-        
-        if not unique_breaches:
-            return {
-                'has_breaches': False,
-                'message': 'No known data breaches for this domain',
-                'breaches': []
-            }
-        
-        # Calculate severity based on breach size and recency
+
         breach_list = []
         total_records = 0
-        highest_risk = 'low'
-        
         for breach in unique_breaches:
             records = breach.get('records', 0)
-            year = breach.get('year', 2000)
             total_records += records
-            
-            # Determine risk level
             if records > 100_000_000:
                 risk = 'critical'
             elif records > 10_000_000:
@@ -224,92 +396,153 @@ class EmailModule(BaseModule):
                 risk = 'medium'
             else:
                 risk = 'low'
-            
-            if risk == 'critical':
-                highest_risk = 'critical'
-            elif risk == 'high' and highest_risk != 'critical':
-                highest_risk = 'high'
-            elif risk == 'medium' and highest_risk not in ['critical', 'high']:
-                highest_risk = 'medium'
-            
             breach_list.append({
                 'name': breach.get('name'),
-                'year': year,
+                'year': breach.get('year'),
                 'records': records,
                 'risk': risk,
                 'description': breach.get('description', ''),
                 'data_types': breach.get('data_types', []),
-                'country': breach.get('country')
+                'country': breach.get('country'),
             })
-        
-        # Check if username might be affected
-        username_affected = False
-        affected_reason = None
-        
-        for breach in breach_list:
-            if 'usernames' in breach.get('data_types', []):
-                username_affected = True
-                affected_reason = f"Usernames were exposed in {breach['name']} breach"
-                break
-            if 'emails' in breach.get('data_types', []):
-                username_affected = True
-                affected_reason = f"Email addresses were exposed in {breach['name']} breach"
-                break
-        
-        # Sort breaches by year (newest first)
+
         breach_list.sort(key=lambda x: x['year'], reverse=True)
-        
+
         return {
-            'has_breaches': True,
-            'message': f'⚠️ This domain has been involved in {len(breach_list)} known data breach(es)',
-            'breaches': breach_list[:5],  # Show top 5 most recent
+            'has_known_breaches': len(breach_list) > 0,
+            'breaches': breach_list[:5],
             'total_breaches': len(breach_list),
             'total_records_exposed': total_records,
-            'risk_level': highest_risk,
-            'username_may_be_affected': username_affected,
-            'affected_reason': affected_reason,
-            'recommendation': self._get_recommendation(highest_risk, username_affected)
+            'note': 'Riwayat breach DOMAIN — bukan khusus alamat email ini',
         }
-    
-    def _calculate_breach_risk(self, breach_info: Dict) -> int:
+
+    async def _check_email_breaches_live(self, email: str) -> Dict:
+        """Real email-specific breach lookups via keyless public sources.
+
+        Sources: GhostProject, LeakCheck (public), BreachDirectory, Hudson Rock.
         """
-        Calculate risk score (0-100) based on breach info
-        """
-        if not breach_info.get('has_breaches'):
-            return 0
-        
+        result = {
+            'sources_checked': 0,
+            'sources_found': [],
+            'total_records': 0,
+            'hudson_rock_infections': 0,
+            'hudson_rock': [],
+            'details': {},
+        }
+        try:
+            from stalker.modules.dark_web_checker import (
+                check_ghostproject, check_leakcheck_free, check_breachdirectory,
+                check_intelx_free, check_psbdmp, check_xposedornot,
+            )
+            from stalker.modules.breach_check import check_hudson_rock
+        except ImportError:
+            return result
+
+        ghost, leak, breachdir, intelx, psbdmp, xon, hr = await asyncio.gather(
+            check_ghostproject(email),
+            check_leakcheck_free(email),
+            check_breachdirectory(email),
+            check_intelx_free(email),
+            check_psbdmp(email),
+            check_xposedornot(email),
+            check_hudson_rock(email=email),
+            return_exceptions=True,
+        )
+
+        for name, r in (('ghostproject', ghost),
+                        ('leakcheck', leak),
+                        ('breachdirectory', breachdir),
+                        ('intelx', intelx),
+                        ('psbdmp', psbdmp),
+                        ('xposedornot', xon)):
+            if isinstance(r, dict):
+                result['sources_checked'] += 1
+                result['details'][name] = r
+                if r.get('found'):
+                    result['sources_found'].append(name)
+                    result['total_records'] += r.get('count', 0)
+
+        if isinstance(hr, dict):
+            hr_email = hr.get('email', {})
+            result['hudson_rock_infections'] = hr_email.get('total_infections', 0)
+            result['hudson_rock'] = hr_email.get('infections', [])[:10]
+
+        return result
+
+    async def _build_breach_info(self, email: str, domain: str, username: str) -> Dict:
+        """Combine real email-specific results with historical domain context."""
+        domain_context = self._domain_breach_context(domain)
+        live = await self._check_email_breaches_live(email)
+
+        sources_found = live.get('sources_found', [])
+        infections = live.get('hudson_rock_infections', 0)
+        has_breaches = bool(sources_found) or infections > 0
+
+        # Evidence = temuan faktual yang bisa diverifikasi (bukan tebakan)
+        evidence = []
+        for name in sources_found:
+            rec = live.get('details', {}).get(name, {}).get('count')
+            evidence.append(f"{name}: ditemukan" + (f" ({rec} record)" if rec else ""))
+        if infections:
+            evidence.append(f"Hudson Rock: {infections} infeksi infostealer")
+
+        # Skor = fungsi deterministik dari temuan terverifikasi (bukan probabilitas nyata)
         risk_score = 0
-        risk_level = breach_info.get('risk_level', 'low')
-        
-        if risk_level == 'critical':
-            risk_score = 85
-        elif risk_level == 'high':
-            risk_score = 70
-        elif risk_level == 'medium':
-            risk_score = 50
+        if sources_found:
+            risk_score += 40 + min(len(sources_found) - 1, 3) * 10
+        if infections > 0:
+            risk_score += 45
+        risk_score = min(risk_score, 100)
+
+        if infections > 0:
+            risk_level = 'critical'
+        elif len(sources_found) >= 2:
+            risk_level = 'high'
+        elif len(sources_found) == 1:
+            risk_level = 'medium'
         else:
-            risk_score = 30
-        
-        # Add extra points if username may be affected
-        if breach_info.get('username_may_be_affected'):
-            risk_score += 15
-        
-        # Cap at 100
-        return min(risk_score, 100)
-    
-    def _get_recommendation(self, risk_level: str, username_affected: bool) -> str:
-        """
-        Generate security recommendation based on breach info
-        """
-        if risk_level == 'critical':
-            return "IMMEDIATE ACTION REQUIRED: Change all passwords, enable 2FA, and monitor accounts for suspicious activity."
-        elif risk_level == 'high':
-            return "URGENT: Change your password for this service and any other accounts using the same password. Enable 2FA."
-        elif risk_level == 'medium':
-            if username_affected:
-                return "Consider changing your username/email on this service and use a password manager with unique passwords."
-            return "Recommend changing your password if you haven't done so recently. Enable 2FA if available."
+            risk_level = 'none'
+
+        if has_breaches:
+            parts = []
+            if sources_found:
+                parts.append(f"ditemukan di {', '.join(sources_found)}")
+            if infections:
+                parts.append(f"{infections} infeksi infostealer (Hudson Rock)")
+            message = '⚠️ Email ini ditemukan dalam data breach: ' + '; '.join(parts)
         else:
-            if username_affected:
-                return "Your username may have been exposed. Consider using a different email/username for sensitive accounts."
-            return "No immediate action required, but always use unique passwords and enable 2FA where possible."
+            message = '✓ Tidak ditemukan dalam sumber breach publik yang diperiksa'
+
+        return {
+            'has_breaches': has_breaches,
+            'sources_checked': live['sources_checked'] + 1,  # +1 Hudson Rock
+            'sources_found': sources_found,
+            'total_records': live['total_records'],
+            'hudson_rock_infections': infections,
+            'hudson_rock': live['hudson_rock'],
+            'risk_level': risk_level,
+            'risk_score': risk_score,
+            'message': message,
+            'recommendation': self._get_recommendation(risk_level, infections > 0),
+            'evidence': evidence,
+            'note': (f"Skor dihitung dari {len(evidence)} temuan terverifikasi "
+                     f"({len(sources_found)} sumber breach, {infections} infeksi). "
+                     f"0 = 'tidak ditemukan di sumber yang dicek', bukan jaminan aman."),
+            'domain_context': domain_context,
+            # Back-compat: list of (historical domain) breaches for downstream renderers
+            'breaches': domain_context['breaches'],
+            'total_breaches': domain_context['total_breaches'],
+        }
+
+    def _get_recommendation(self, risk_level: str, infected: bool = False) -> str:
+        """Security recommendation based on real findings."""
+        if infected:
+            return ("URGENT: Perangkat/akun yang terkait email ini pernah terekspos infostealer. "
+                    "Ganti password SEMUA akun, aktifkan 2FA, dan scan perangkat dari malware.")
+        if risk_level == 'critical':
+            return "IMMEDIATE ACTION: Ganti password, aktifkan 2FA, dan pantau akun dari aktivitas mencurigakan."
+        if risk_level == 'high':
+            return "URGENT: Ganti password untuk layanan ini dan akun lain yang memakai password sama. Aktifkan 2FA."
+        if risk_level == 'medium':
+            return "Email muncul di sumber breach publik. Gunakan password manager dengan password unik dan aktifkan 2FA."
+        return "Tidak ditemukan breach spesifik untuk email ini di sumber publik yang diperiksa."

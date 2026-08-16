@@ -134,6 +134,14 @@ class URLModule(BaseModule):
         }
 
         start = datetime.now()
+        # Jangan minta brotli (br) di request sendiri: kalau library brotli tidak
+        # terinstall, aiohttp gagal decode → hasil kosong total. Request-level
+        # headers menimpa session headers, jadi ini aman apa pun session-nya.
+        try:
+            import brotli  # noqa: F401
+            _accept_enc = 'gzip, deflate, br'
+        except ImportError:
+            _accept_enc = 'gzip, deflate'
         try:
             async with self.session.get(
                 url,
@@ -142,7 +150,8 @@ class URLModule(BaseModule):
                 ssl=False,
                 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                                        'AppleWebKit/537.36 (KHTML, like Gecko) '
-                                       'Chrome/124.0.0.0 Safari/537.36'}
+                                       'Chrome/124.0.0.0 Safari/537.36',
+                         'Accept-Encoding': _accept_enc}
             ) as resp:
                 result['status'] = resp.status
                 result['final_url'] = str(resp.url)
