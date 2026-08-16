@@ -1,7 +1,5 @@
 <div align="center">
 
-<!-- Zqrya v3.0 - OSINT Intelligence Suite -->
-
 <img src="assets/webui-dashboard.png" alt="Zqrya Web UI Dashboard" width="900"/>
 
 # 🕵️ Zqrya v3.0
@@ -13,12 +11,12 @@
 [![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Version](https://img.shields.io/badge/Version-3.0.0-8b5cf6?style=for-the-badge&logo=semanticrelease&logoColor=white)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Platforms](https://img.shields.io/badge/Platforms-160%2B-blueviolet?style=for-the-badge&logo=githubsponsors&logoColor=white)]()
+[![Platforms](https://img.shields.io/badge/Username%20Platforms-160%2B-blueviolet?style=for-the-badge&logo=githubsponsors&logoColor=white)]()
 [![Made in Indonesia](https://img.shields.io/badge/MADE_IN-INDONESIA-red?style=for-the-badge&logo=ko-fi&logoColor=white)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge&logo=git&logoColor=white)](CONTRIBUTING.md)
 
-> **OSINT Intelligence Suite** — explore, analyze, and gather publicly available information
-> about individuals, organizations, and digital assets. **Fast, powerful, and completely API-free.**
+> **OSINT Intelligence Suite** — investigate usernames, emails, phone numbers, domains, IPs, NIK/NKK,
+> and more from **public data only**. No API keys. No registration. Fast, async, and free.
 
 </div>
 
@@ -26,49 +24,19 @@
 
 ## 📑 Table of Contents
 
-<details>
-<summary><b>Click to expand</b></summary>
-
 | Section | Description |
 |---------|-------------|
-| [About Zqrya](#-about-zqrya) | What is this tool? |
-| [Screenshots](#-screenshots) | UI previews |
-| [Features](#-core-features) | Key capabilities at a glance |
-| [Quick Start](#-quick-start) | Installation & first scan |
-| [Interactive Shell](#-interactive-shell) | Menu-driven CLI |
+| [Features](#-core-features) | What Zqrya can do |
+| [Quick Start](#-quick-start) | Install + first scan (2 minutes) |
+| [Interactive Shell](#-interactive-shell) | 27-tool menu-driven CLI |
+| [CLI Reference](#-cli-reference) | One-liners for every tool |
+| [OSINT Tools](#-osint-tools) | NIK, NKK, QR, e-wallet, HLR & more |
+| [IP Logger](#-ip-logger--tracking-links) | Capture IPs with a tracking link |
 | [Web UI](#-web-ui--professional-dashboard) | Localhost dashboard |
-| [Deep Pipeline](#-full-intelligence-pipeline) | Maigret + dark web + more |
-| [Phone OSINT](#-phone-osint--8-countries) | 8 countries supported |
-| [Email Breach](#-email-breach-detection) | Leak alerts + risk score |
-| [Username OSINT](#-username-osint--160-platforms) | 160+ platforms |
-| [Domain OSINT](#-domain-osint--complete-recon) | DNS + HTTP + WHOIS + tech stack |
-| [URL OSINT](#-url-osint--website-footprint) | Website footprint analysis |
-| [IP OSINT](#-ip-osint--geolocation--risk-scoring) | Location + threat score |
-| [Reports](#-report-formats) | JSON, HTML, TXT, MD |
-| [Batch Processing](#-batch-processing) | Multi-target scan |
+| [Full Pipeline](#-full-intelligence-pipeline) | Maigret 600+ & dark web |
+| [Configuration](#-configuration) | `.env` options |
+| [Reports & Batch](#-reports--batch-processing) | Export + multi-target scans |
 | [Disclaimer](#-legal-disclaimer) | Read before using |
-
-</details>
-
----
-
-## 🧠 About Zqrya
-
-_**Zqrya** is a **robust and versatile OSINT (Open Source Intelligence) framework** designed to empower cybersecurity enthusiasts, digital investigators, and ethical hackers. Built with **Python** and completely **API-free**, Zqrya allows users to **explore, analyze, and gather publicly available information** about individuals, organizations, and digital assets quickly and efficiently._
-
-_The framework provides tools to investigate a wide range of data sources, including **usernames, emails, phone numbers, domains, IP addresses, and full website URLs**, making it an all-in-one solution for understanding online footprints, detecting exposure, and performing digital reconnaissance._
-
----
-
-## 📸 Screenshots
-
-| Domain Result | Username Result | Email Breach |
-|:---:|:---:|:---:|
-| ![Domain](assets/domain-result.png) | ![Username](assets/username-result.png) | ![Email Breach](assets/email-breach.png) |
-
-| IP Result | Web UI Dashboard | HTML Report |
-|:---:|:---:|:---:|
-| ![IP](assets/ip-result.png) | ![Web UI](assets/webui-dashboard.png) | ![HTML Report](assets/html-report.png) |
 
 ---
 
@@ -77,87 +45,227 @@ _The framework provides tools to investigate a wide range of data sources, inclu
 | # | Feature | What It Means |
 |---|---------|---------------|
 | 1 | **Zero API Keys** | Use immediately — no signup, no payment, no hidden costs |
-| 2 | **Async & Fast** | Parallel scanning, 10x faster than similar tools |
-| 3 | **Auto Detect** | Paste anything, Zqrya auto-detects the type |
-| 4 | **Web UI** | Professional localhost dashboard with dark/light theme |
-| 5 | **8 Countries** | Phone OSINT: ID, US, GB, MY, IN, AU, SG, PH |
-| 6 | **160+ Platforms** | Username checking across 160+ sites simultaneously |
-| 7 | **Maigret 600+** | Deep username search with real names, avatars, bios |
-| 8 | **Dark Web Check** | Paste sites + breach DBs (GhostProject, Psbdmp, IntelX...) |
-| 9 | **Hudson Rock** | Infostealer infection intelligence (free API) |
-| 10 | **URL Footprint** | Extract social links, emails & tech from any website |
-| 11 | **WHOIS Lookup** | Domain registration info (registrar, dates) |
-| 12 | **Shodan InternetDB** | Open ports, CVEs, tags for any IP |
-| 13 | **Username Variants** | Generate 150+ permutations for deeper searches |
-| 14 | **Breach Detection** | Email leak alerts + risk score (0-100) |
-| 15 | **Batch Processing** | Scan multiple targets from a single file |
-| 16 | **4 Report Formats** | JSON, HTML, TXT, Markdown |
-| 17 | **Server History** | Web UI saves scan records between sessions |
+| 2 | **27 Tools, One Shell** | Everything from username scans to NIK/NKK to IP logging |
+| 3 | **Async & Fast** | Parallel scanning across platforms |
+| 4 | **Auto Detect** | Paste anything, Zqrya detects the entity type |
+| 5 | **Web UI** | Professional dashboard with dark/light theme |
+| 6 | **Maigret 600+** | Deep username search with real names, avatars, bios |
+| 7 | **Dark Web Check** | Paste sites + breach DBs (GhostProject, Psbdmp, IntelX...) |
+| 8 | **NIK / NKK Lookup** | Parse & validate Indonesian ID / Family Card numbers |
+| 9 | **IP Logger** | Tracking link → captures target IP + device + geo live |
+| 10 | **E-wallet OSINT** | GoPay / OVO / DANA / ShopeePay / LinkAja / Sakuku |
+| 11 | **QR/Barcode Decoder** | Decode from file or URL, expand short links, WiFi creds |
+| 12 | **Phone HLR** | Carrier, line type, live status (best-effort) |
+| 13 | **Gaming OSINT** | Steam + Roblox + Minecraft profile data |
+| 14 | **Exposed Devices** | Shodan InternetDB: ports, CVEs, tags |
+| 15 | **Visual Geolocation** | EXIF GPS + reverse-image search links |
+| 16 | **Username Variants** | 150+ permutations for deeper searches |
+| 17 | **Batch Processing** | Scan multiple targets from one file |
+| 18 | **4 Report Formats** | JSON, HTML, TXT, Markdown |
 
 ---
 
 ## 🚀 Quick Start
 
+> ⚠️ **GeoIP database is required** — Zqrya blocks access until at least one local
+> GeoIP database is present (offline IP geolocation). One command downloads it, no account needed.
+
 ### Installation
 
 ```bash
-# Clone the repository
+# 1. Clone
 git clone https://github.com/webdev11-code/Zqrya-OSINT.git
 cd Zqrya-OSINT
 
-# Install dependencies
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# Install vendored Maigret engine (600+ platforms)
+# 3. Install vendored Maigret engine (600+ platforms)
 pip install -e maigret/
 
-# Verify installation
+# 4. Download GeoIP database (~60 MB, keyless) — REQUIRED before first run
+python sources/download_geoip.py
+
+# 5. Verify
 python zqrya.py -h
 ```
 
-### First Scan Examples
+> **GeoIP options:** DB-IP Lite (default, no account) · `MAXMIND_LICENSE_KEY=... python sources/download_geoip.py --geoip2` for GeoLite2 · `IP2LOCATION_TOKEN=... --ip2location` for IP2Location. Use `--all` for all three.
+
+### First Scan
 
 ```bash
 # Interactive shell (menu-driven)
 python zqrya.py
 
-# Username investigation
-python zqrya.py -u PiuPiuu
-
-# Email with breach detection
-python zqrya.py -e user@gmail.com --report
-
-# Phone number (Indonesia)
-python zqrya.py -p 08123456789
-
-# Domain recon with WHOIS & tech detection
-python zqrya.py -d example.com --deep
-
-# Website footprint (NEW!)
-python zqrya.py -url https://example.com
-
-# Deep username search — Maigret 600+ platforms (NEW!)
-python zqrya.py -m PiuPiuu
-
-# Dark web / paste / breach check (NEW!)
-python zqrya.py --darkweb user@gmail.com
-
-# Generate 150+ username variants (NEW!)
-python zqrya.py --variants PiuPiuu
-
-# Combined OSINT — all Zqrya engines (NEW!)
-python zqrya.py --full PiuPiuu
-
-# IP geolocation + risk score
-python zqrya.py -i 8.8.8.8
-
-# Launch Web UI (NEW!)
-python zqrya.py -web
+# One-liners
+python zqrya.py -u username          # Username OSINT (160+ platforms)
+python zqrya.py -e user@gmail.com    # Email + breach check
+python zqrya.py -p 08123456789       # Phone (8 countries)
+python zqrya.py -d example.com       # Domain recon + WHOIS
+python zqrya.py -i 8.8.8.8           # IP geolocation + risk
+python zqrya.py -url https://site.com # Website footprint
+python zqrya.py -m username          # Maigret deep search (600+)
+python zqrya.py --darkweb user@gmail.com  # Dark web / breach
+python zqrya.py --full username      # Combined: Zqrya + deep pipeline
+python zqrya.py --variants username  # 150+ username variants
+python zqrya.py -web                 # Launch web dashboard
 ```
 
-### Configuration
+---
 
-Copy `.env.example` to `.env` to enable optional API keys:
+## 🖥️ Interactive Shell
+
+Run `python zqrya.py` (or `python zqrya.py -sh`) — a complete **27-tool menu**:
+
+```
+ 1.  👤  Username OSINT                       15.  👛  E-wallet OSINT
+ 2.  📧  Email OSINT                          16.  🟢  Status online checker
+ 3.  📱  Phone OSINT                          17.  📶  Phone HLR lookup
+ 4.  🌐  Domain Recon                         18.  ↩️  Reverse email
+ 5.  🌍  IP Address                           19.  🎮  Gaming OSINT
+ 6.  🕸️  Website Footprint (URL)              20.  📸  IG/TikTok deep
+ 7.  🧠  Maigret Deep Search (600+)           21.  🖧  Exposed device search
+ 8.  🌑  Dark Web / Breach Check              22.  📍  Visual geolocation
+ 9.  🧬  Username Variants                    23.  🎯  IP Logger (tracking link)
+10.  🚀  Combined OSINT (Full Pipeline)       24.  🖥️  Launch Web Dashboard
+11.  📦  Batch Scan                           25.  🕘  History
+12.  🪪  NIK/KTP lookup                       26.  ⚙️  Settings
+13.  📇  NKK / Kartu Keluarga                 27.  ℹ️  About / Help
+14.  🔳  QR/barcode decoder                    0.  🚪  Exit
+```
+
+**In-shell commands:** `u <name>` · `e <email>` · `p <phone>` · `d <domain>` · `i <ip>` · `url <url>` · `m <name>` · `dw <target>` · `var <name>` · `full <target>` · `batch <file>` · `deep` · `report` · `set-format <fmt>` · `history` / `again <n>` · `web` · `help` / `menu` / `clear` / `exit`
+
+---
+
+## 🔧 CLI Reference
+
+Zqrya ships with **two CLIs**: `zqrya.py` (quick scans + shell) and `stalker` (per-tool commands).
+
+```bash
+# zqrya.py
+python zqrya.py -u name            python zqrya.py -e email
+python zqrya.py -p phone           python zqrya.py -d domain
+python zqrya.py -i ip              python zqrya.py -url url
+python zqrya.py -m name            python zqrya.py --darkweb target
+python zqrya.py --full target      python zqrya.py --variants name
+python zqrya.py --batch file.txt   python zqrya.py -web --port 7331
+python zqrya.py --iplogger --redirect https://site.com
+
+# stalker CLI (per-tool)
+python -m stalker.cli nik 3523151001740001
+python -m stalker.cli nkk 3510080101010001
+python -m stalker.cli ewallet 08123456789
+python -m stalker.cli online username
+python -m stalker.cli hlr 08123456789
+python -m stalker.cli revemail user@gmail.com
+python -m stalker.cli gaming username
+python -m stalker.cli social username
+python -m stalker.cli device 8.8.8.8
+python -m stalker.cli geolocate photo.jpg
+python -m stalker.cli qr qr.png
+python -m stalker.cli leak password123
+python -m stalker.cli reverseip 8.8.8.8
+python -m stalker.cli monitor username --interval 30
+```
+
+---
+
+## 🛠️ OSINT Tools
+
+### 🇮🇩 Indonesian Identity
+
+| Tool | Menu | Command | What You Get |
+|------|:----:|---------|--------------|
+| **NIK / KTP** | 12 | `nik <16-digit>` | Parse + validate: gender, birth date, province/city, serial, active status |
+| **NKK / Kartu Keluarga** | 13 | `nkk <16-digit>` | Parse + validate, **family members list** (NIK, marital status, occupation) from local SIAK DB |
+
+> NIK/NKK names & family data come from a **local SIAK/NPWP database** you provide in `databaselocal/`
+> (CSV with a `NIK` column). Without it, Zqrya still parses/validates the number structure.
+> Generate a sample DB with `python sources/generate_sample_db.py` (fictional data).
+
+### 🔎 Everyday Tools
+
+| Tool | Menu | Command | What You Get |
+|------|:----:|---------|--------------|
+| **QR/Barcode decoder** | 14 | `qr <file-or-url>` | Decode QR/barcode, classify payload (URL/WiFi/vCard), expand short links |
+| **E-wallet OSINT** | 15 | `ewallet <phone>` | GoPay / OVO / DANA / ShopeePay / LinkAja / Sakuku + verify guide |
+| **Status online** | 16 | `online <target>` | Telegram presence + name; WhatsApp link (privacy-limited) |
+| **Phone HLR** | 17 | `hlr <phone>` | Carrier, line type, country, live status (best-effort) |
+| **Reverse email** | 18 | `revemail <email>` | Reputation, suspicious flag, found name/phone, manual links |
+| **Gaming OSINT** | 19 | `gaming <username>` | Steam + Roblox + Minecraft (keyless) |
+| **IG/TikTok deep** | 20 | `social <username>` | Followers, bio, verified (best-effort) |
+| **Exposed device** | 21 | `device <ip>` | Shodan InternetDB: ports, services, CVEs |
+| **Visual geolocation** | 22 | `geolocate <file-or-url>` | EXIF GPS + reverse-image search (Yandex/Lens/TinEye/Bing) |
+
+---
+
+## 🎯 IP Logger — Tracking Links
+
+Generate a link that captures a target's **IP + device + location** the moment they click:
+
+```bash
+# Interactive (menu 23): pick a decoy — redirect / custom page / pixel / live tracking
+python zqrya.py --iplogger --redirect https://example.com
+python zqrya.py --iplogger --page "<h1>Loading...</h1>"
+python zqrya.py --iplogger --pixel           # 1x1 email-tracking pixel
+```
+
+- **Public tunnel** via localhost.run/serveo (keyless) → shareable link
+- **Short link** via is.gd / tinyurl / clck.ru (fallback chain)
+- **Live hits** — IP, device (OS/browser), language, referer, geo + map link
+- **Live tracking mode** — page pings every 15s, alerts when target moves networks or closes the page
+- Logs saved to `output/iplogger/`
+
+> ⚠️ **Ethical use only** — only track people who consented or assets you own.
+
+---
+
+## 🌐 Web UI — Professional Dashboard
+
+```bash
+python zqrya.py -web
+# Open http://localhost:7331
+```
+
+| Feature | Description |
+|---------|-------------|
+| **All 27 tools** | Full tool set in the browser, not just core scans |
+| **Dark/Light theme** | Toggle, preference saved |
+| **IP Logger panel** | Start/stop logger + live hit feed with map |
+| **Server-side history** | Persists to disk, click to re-run |
+| **Batch scan** | Paste multiple targets |
+| **Monitor terus** | Polling loop mode without the CLI |
+| **Live detection** | Entity-type detection as you type |
+| **Export** | JSON / Markdown / print-to-PDF |
+| **Responsive** | Works on phone/tablet |
+
+---
+
+## 🛰️ Full Intelligence Pipeline
+
+`--full` (any target), `--deep` (username/email/phone) and the shell's deep mode run **both engines**:
+Zqrya modules **and** the deep pipeline — merged into one report.
+
+| Capability | Source | What You Get |
+|------------|--------|--------------|
+| 🧠 **Maigret Engine** | vendored `maigret/` | 600+ platforms, real names, avatars, bios |
+| 🌑 **Dark Web Checker** | `dark_web_checker.py` | GhostProject, Psbdmp, BreachDirectory, LeakCheck, IntelX |
+| 🦠 **Hudson Rock** | `breach_check.py` | Infostealer infection intelligence (free) |
+| 📧 **Email Scanner** | `email_scanner.py` | Registration on 30+ platforms |
+| 📱 **Phone Scanner** | `phone_scanner.py` | Truecaller + 6 platforms + carrier/geo |
+| 🛰️ **Shodan InternetDB** | `ip_tracker.py` | Open ports, CVEs, tags (keyless) |
+| 🧬 **Username Variants** | `username_variants.py` | 150+ permutations |
+| 🔄 **Recursive Search** | `recursive_search.py` | Re-runs on discovered usernames |
+| 🎭 **Face Search** | `face_search.py` | 5 reverse-image engines on avatars |
+| 🕸️ **Social Graph** | `social_graph.py` | Interactive visualization (pyvis) |
+
+---
+
+## ⚙️ Configuration
+
+Copy `.env.example` to `.env` to enable optional integrations:
 
 | Variable | Purpose |
 |----------|---------|
@@ -165,325 +273,50 @@ Copy `.env.example` to `.env` to enable optional API keys:
 | `EXIFTOOLS_API_KEY` | EXIF metadata extraction |
 | `NUMVERIFY_API_KEY` | Phone verification API |
 | `VERIPHONE_API_KEY` | City-level phone location (best for ID) |
-| `MAIGRET_MAX_SITES` | Max sites for Maigret (default 500 desktop / 100 Termux) |
+| `MAIGRET_MAX_SITES` | Max sites for Maigret |
 | `STEALTH_MODE` | Random delays + header rotation |
+| `LOCALDB_DIR` | Folder with SIAK/NPWP CSVs (NIK/NKK names) |
+| `ZQRYA_ALLOW_NO_GEOIP=1` | Dev-only: skip the GeoIP requirement |
 
 ---
 
-## 🖥️ Interactive Shell
+## 📄 Reports & Batch Processing
 
-Run `python zqrya.py` (or `python zqrya.py -sh`) with no arguments to launch the
-interactive **`Zqrya > `** shell — a complete menu-driven CLI:
-
-```
-┌─ MAIN MENU ─────────────────────────────┐
-│  [1] 👤  Username OSINT                 │
-│  [2] 📧  Email OSINT                    │
-│  [3] 📱  Phone OSINT                    │
-│  [4] 🌐  Domain Recon                   │
-│  [5] 🌍  IP Address                     │
-│  [6] 🕸️  Website Footprint (URL)        │
-│  [7] 🧠  Maigret Deep Search (600+)     │
-│  [8] 🌑  Dark Web / Breach Check        │
-│  [9] 🧬  Username Variants              │
-│ [10] 🚀  Combined OSINT (Full Scan)     │
-│ [11] 📦  Batch Scan                     │
-│ [12] 🖥️  Launch Web Dashboard           │
-│ [13] 🕘  History                        │
-│ [14] ⚙️   Settings                      │
-│ [15] ℹ️   About / Help                  │
-│ [0]  🚪  Exit                           │
-└─────────────────────────────────────────┘
-Zqrya > _
-```
-
-**In-shell commands:**
-
-| Command | Description |
-|---------|-------------|
-| `u <name>` / `e <email>` / `p <phone>` | Quick scan shortcuts |
-| `d <domain>` / `i <ip>` / `url <url>` | Domain, IP, URL scans |
-| `m <name>` / `dw <target>` | Maigret / dark web check |
-| `var <name>` / `full <target>` | Variants / combined OSINT scan |
-| `batch <file>` | Batch scan from file |
-| `deep` | Toggle deep investigation mode |
-| `report` | Toggle auto-save report |
-| `set-format <fmt>` | json / html / txt / md / all |
-| `history` / `again <n>` | View / re-run scan history |
-| `web` | Launch web dashboard |
-| `help` / `menu` / `clear` / `exit` | Shell utilities |
-
----
-
-## 🌐 Web UI — Professional Dashboard
-
-> **v3.0 delivers a completely redesigned dashboard.** Clean layout, professional design, dark/light theme.
-
-```bash
-python zqrya.py -web
-# Open http://localhost:7331 in your browser
-```
-
-### Web UI Features
-
-| Feature | Description |
-|---------|-------------|
-| **Dark/Light Theme** | Toggle themes, preference saved automatically |
-| **Server-side History** | Scan records persist to disk, click to re-run |
-| **Batch Scan** | Paste multiple targets, scan sequentially |
-| **URL Tab** | Website footprint scanning from the dashboard |
-| **Deep Scan Modules** | Maigret + dark web + WHOIS — deep scans also run the full deep pipeline (combined) |
-| **Live Detection** | Real-time entity type detection as you type |
-| **Stats Overview** | Module count, findings, timestamps at a glance |
-| **Export Buttons** | JSON / Markdown export directly from browser |
-| **Print Support** | Print or save as PDF |
-| **Visual Results** | Card-based display with color-coded status |
-| **Mobile Friendly** | Responsive design, works on phone/tablet |
-
----
-
-## 🛰️ Full Intelligence Pipeline
-
-> **Zqrya v3.0 now includes the full intelligence pipeline** — built into the project. This adds a massive OSINT arsenal on top of the core Zqrya modules.
->
-> **Combined scan** — `--full` (any target type), `--deep` (username/email/phone), and the shell's deep mode run **both engines in one go**: the Zqrya deep modules **and** the full deep pipeline. Results are merged into a single report (JSON includes both, HTML has a dedicated *Zqrya Module Results* section).
-
-| Capability | Source | What You Get |
-|------------|--------|--------------|
-| 🧠 **Maigret Engine** | vendored `maigret/` | 600+ platforms, real names, avatars, bios |
-| 🌑 **Dark Web Checker** | `dark_web_checker.py` | GhostProject, Psbdmp, BreachDirectory, LeakCheck, IntelX |
-| 🦠 **Hudson Rock** | `breach_check.py` | Infostealer infection intelligence (free) |
-| 📧 **Email Scanner** | `email_scanner.py` | Registration check on 30+ platforms |
-| 📱 **Phone Scanner** | `phone_scanner.py` | Truecaller + 6 social platforms + carrier/geo |
-| 🛰️ **Shodan InternetDB** | `ip_tracker.py` | Open ports, CVEs, tags (no API key) |
-| 🧬 **Username Variants** | `username_variants.py` | 150+ permutations: leet, separators, suffixes |
-| 🔄 **Recursive Search** | `recursive_search.py` | Re-runs searches on discovered usernames |
-| 🎭 **Face Search** | `face_search.py` | 5 reverse-image engines on avatars |
-| 🕸️ **Social Graph** | `social_graph.py` | Interactive network visualization (pyvis) |
-
-### How to use
-
-```bash
-# Deep username search via Maigret (600+ platforms)
-python zqrya.py -m PiuPiuu
-
-# Dark web / paste / breach check
-python zqrya.py --darkweb user@gmail.com
-
-# Generate 150+ username variants
-python zqrya.py --variants PiuPiuu
-
-# COMBINED SCAN — runs the Zqrya engine + full deep pipeline in one go,
-# results merged into a single report
-python zqrya.py --full PiuPiuu
-python zqrya.py --full user@gmail.com
-python zqrya.py --full +62812345678
-
-# Deep scan of username/email/phone ALSO runs the deep pipeline (combined)
-python zqrya.py -u PiuPiuu --deep
-python zqrya.py -e user@gmail.com --deep
-python zqrya.py -p 08123456789 --deep
-```
-
----
-
-## 📱 Phone OSINT — 8 Countries
-
-> **The only Indonesian OSINT tool with multi-country phone lookup!**
-
-| Country | Code | Example Command | Providers |
-|---------|------|-----------------|-----------|
-| 🇮🇩 Indonesia | +62 | `-p 08123456789` | Telkomsel, Indosat, XL, Three, Smartfren |
-| 🇺🇸 USA | +1 | `-p +12125551234` | AT&T, Verizon, T-Mobile |
-| 🇬🇧 UK | +44 | `-p +447700123456` | EE, O2, Vodafone, Three |
-| 🇲🇾 Malaysia | +60 | `-p +60123456789` | Maxis, Celcom, DiGi, U Mobile |
-| 🇮🇳 India | +91 | `-p +919876543210` | Airtel, Vi, Jio, BSNL |
-| 🇦🇺 Australia | +61 | `-p +61412345678` | Telstra, Optus, Vodafone |
-| 🇸🇬 Singapore | +65 | `-p +6581234567` | Singtel, StarHub, M1, SIMBA |
-| 🇵🇭 Philippines | +63 | `-p +639171234567` | Globe, Smart, DITO |
-
-**What you get from phone scan:**
-- E.164, international, and national formats
-- Carrier/provider detection
-- Location & timezone information
-- WhatsApp + Telegram direct links (if mobile)
-- Possible social media handles from the number
-
----
-
-## 🔐 Email Breach Detection
-
-```bash
-python zqrya.py -e user@yahoo.com --report
-```
-
-**What you get:**
-- **Risk score** (0-100) — higher = more dangerous
-- **Breach details** — name, year, records exposed
-- **Data types** — what was leaked (emails, passwords, etc.)
-- **Security recommendations** — what to do next
-
-**Known breaches in database:**
-- Yahoo (3B records), Adobe (152M), LinkedIn (117M)
-- Facebook (533M), Twitter (5.4M), Canva (139M)
-- Tokopedia (91M), Bhinneka (1.2M), JD.ID (14M)
-
----
-
-## 👤 Username OSINT — 160+ Platforms
-
-Check usernames across **169+ platforms** simultaneously:
-
-| Category | Platforms |
-|----------|-----------|
-| **Social** | Facebook, Instagram, Twitter, TikTok, Threads, Bluesky, Snapchat, Pinterest |
-| **Developer** | GitHub, GitLab, Bitbucket, HackerOne, Bugcrowd, Keybase, NPM, PyPI, Docker Hub |
-| **Gaming** | Steam, Roblox, Xbox, PlayStation, Nintendo, Chess.com, Lichess |
-| **Music** | Spotify, SoundCloud, Bandcamp, Genius, Mixcloud, Last.fm |
-| **Video** | YouTube, Twitch, Vimeo, Kick, Rumble, Dailymotion, Bilibili, PeerTube |
-| **Indonesian** | Kaskus, Kompasiana, Detik Forum, Indowebster, Lintas.me |
-| **Professional** | LinkedIn, Upwork, Fiverr, Freelancer, AngelList, Crunchbase, Xing |
-| **Blog/Forum** | Medium, Reddit, Quora, Dev.to, HackerNews, ProductHunt, Disqus |
-
----
-
-## 🌍 Domain OSINT — Complete Recon
-
-```bash
-python zqrya.py -d example.com --deep
-```
-
-**DNS Records:**
-- A, AAAA, NS, MX, TXT, SOA, CNAME, PTR
-
-**WHOIS (NEW in v3.0):**
-- Registrar, creation date, expiration date
-- Name servers, registration status
-- Registrant organization & country
-
-**HTTP Analysis:**
-- HTTP/HTTPS status codes
-- Server headers, redirect chains
-- Response time
-
-**Technology Detection (70+ patterns):**
-- **CMS:** WordPress, Joomla, Drupal, Shopify, Wix, Squarespace
-- **Frameworks:** React, Vue, Angular, Next.js, Nuxt.js, Svelte
-- **Servers:** nginx, Apache, IIS, Cloudflare, LiteSpeed, Caddy
-- **E-commerce:** WooCommerce, Magento, BigCommerce, PrestaShop
-
-**Security Headers:**
-- HSTS, CSP, X-Frame-Options, X-Content-Type-Options
-
-**SSL/TLS Info:**
-- Certificate issuer, expiry date, days left
-- DNSSEC status
-
----
-
-## 🔗 URL OSINT — Website Footprint
-
-> **NEW in v3.0!** Analyze a full website URL to map its digital presence.
-
-```bash
-python zqrya.py -url https://example.com
-```
-
-**What you get:**
-- **Page metadata** — title, description, author, language, OG tags
-- **Social profiles** — all social media links found on the page
-- **Contact info** — emails & phone numbers extracted from the page
-- **Technology stack** — CMS, frameworks, servers, analytics
-- **Security headers** — HSTS, CSP, X-Frame-Options
-- **Page stats** — total links, external links, response time
-
----
-
-## 🌍 IP OSINT — Geolocation + Risk Scoring
-
-```bash
-python zqrya.py -i 8.8.8.8
-```
-
-**Geolocation:**
-- Country, region, city, coordinates
-- Timezone, ISP, organization
-- ASN with name
-
-**Threat Intelligence:**
-- **Risk score** (0-100) — based on proxy/VPN/hosting status
-- **Proxy/VPN detection** — identifies anonymizers
-- **Hosting/datacenter detection**
-- **Mobile network detection**
-
-**RDAP Lookup:**
-- RIR assignment (ARIN, RIPE, APNIC, LACNIC, AFRINIC)
-- Organization registration
-- Abuse contact email
-
----
-
-## 📄 Report Formats
-
-Generate professional reports in **4 formats**:
+### Report formats
 
 | Format | Command | Best For |
 |--------|---------|----------|
-| JSON | `--format json` | Machine parsing, integration with other tools |
-| HTML | `--format html` | Interactive visual report with dark/light theme |
-| TXT | `--format txt` | Simple, lightweight, readable anywhere |
-| Markdown | `--format md` | Documentation, GitHub READMEs |
+| JSON | `--format json` | Machine parsing / integration |
+| HTML | `--format html` | Interactive visual report |
+| TXT | `--format txt` | Lightweight, readable anywhere |
+| Markdown | `--format md` | Docs / READMEs |
 
 ```bash
-# Generate HTML report
-python zqrya.py -u PiuPiuu --format html -o report.html
-
-# Generate all formats at once
+python zqrya.py -u name --format html -o report.html
 python zqrya.py -d example.com --format all -o domain_report
-
-# Compressed JSON (saves space)
 python zqrya.py -e user@gmail.com --format json --compress
 ```
 
----
-
-## 📦 Batch Processing
-
-Scan multiple targets from a single file:
+### Batch scan
 
 ```bash
-# Create targets.txt
 cat > targets.txt << EOF
-PiuPiuu
+username
 user@gmail.com
 08123456789
 example.com
 8.8.8.8
 EOF
 
-# Run batch scan
 python zqrya.py --batch targets.txt --deep --format all
+# Options: --batch-delay 2 · --output-dir ./reports · --quiet
 ```
-
-**Batch Options:**
-- `--batch-delay 2` — Delay between scans (seconds, avoids rate limiting)
-- `--output-dir ./reports` — Custom output directory
-- `--quiet` — Suppress console output (only save reports)
 
 ---
 
 ## 🛡️ Legal Disclaimer
 
-**Zqrya is designed for:**
-- Education and cybersecurity learning
-- Legitimate security research
-- Testing on systems you own or have permission to test
-- Developing OSINT skills professionally
-
-**Zqrya only uses public sources:**
-- Public DNS lookup, RDAP/WHOIS records
-- Public websites and legal APIs
-- Data already openly available
+**Designed for:** education, security research, and testing systems you own or have permission to test.
 
 **Prohibited use (STRICTLY FORBIDDEN):**
 - Doxing or exposing personal data without consent
@@ -497,17 +330,15 @@ python zqrya.py --batch targets.txt --deep --format all
 
 ## 🤝 Contributing
 
-Contributions are welcome!
-
 ```bash
 1. Fork the repository
 2. Create a branch: git checkout -b feature/amazing-feature
-3. Commit changes: git commit -m 'Add amazing feature'
+3. Commit: git commit -m 'Add amazing feature'
 4. Push: git push origin feature/amazing-feature
 5. Open a Pull Request
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full guide.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ---
 
