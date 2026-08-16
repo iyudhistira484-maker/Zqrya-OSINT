@@ -1,0 +1,90 @@
+name: Build docker image and push to DockerHub
+
+on:
+  push:
+    branches: [ main, dev ]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      -
+        name: Extract metadata (CLI)
+        id: meta_cli
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/maigret
+          # Order matters: last-listed tag is pushed last by buildx and shows
+          # up first in Docker Hub UI. So we want latest at the bottom.
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+      -
+        name: Extract metadata (Web UI)
+        id: meta_web
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/maigret
+          # Same ordering trick as above: `web` should rank above its siblings.
+          tags: |
+            type=sha,prefix=web-
+            type=ref,event=branch,suffix=-web
+            type=raw,value=web,enable={{is_default_branch}}
+      # Build Web UI first so CLI (`latest`) becomes the most-recent push
+      # and shows up at the top of the Docker Hub tags list.
+      -
+        name: Build and push (Web UI)
+        id: docker_build_web
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          target: web
+          tags: ${{ steps.meta_web.outputs.tags }}
+          labels: ${{ steps.meta_web.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      -
+        name: Build and push (CLI, default)
+        id: docker_build_cli
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          target: cli
+          tags: ${{ steps.meta_cli.outputs.tags }}
+          labels: ${{ steps.meta_cli.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      -
+        name: Image digests
+        run: |
+          echo "cli: ${{ steps.docker_build_cli.outputs.digest }}"
+          echo "web: ${{ steps.docker_build_web.outputs.digest }}"
+      -
+        name: Update DockerHub repository description
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+          repository: ${{ secrets.DOCKER_HUB_USERNAME }}/maigret
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./README.md
+          enable-url-completion: true

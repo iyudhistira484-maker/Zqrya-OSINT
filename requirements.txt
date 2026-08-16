@@ -1,0 +1,27 @@
+# ── Zqrya Core ──────────────────────────────────────────────
+aiohttp>=3.9.0
+aiofiles>=23.2.0
+aiodns>=3.2.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+rich>=13.7.0
+dnspython>=2.6.0
+phonenumbers>=8.13.0
+tldextract>=5.1.0
+colorama>=0.4.6
+jinja2>=3.1.0
+fake-useragent>=1.4.0
+python-whois>=0.9.0
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# ── Deep Pipeline Integration ──────────────────────
+httpx>=0.24
+click>=8.0
+python-dotenv>=1.0
+googlesearch-python>=1.2
+pyvis>=0.3.2
+networkx>=2.6.3
+
+# ── Maigret Engine (600+ platforms, vendored in maigret/) ──
+# Installed via: pip install -e maigret/

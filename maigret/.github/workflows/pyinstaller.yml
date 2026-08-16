@@ -1,0 +1,82 @@
+name: Package exe with PyInstaller - Windows
+
+on:
+  push:
+    branches: [main, dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Wine Python (not Linux) runs PyInstaller; altgraph needs pkg_resources — reinstall setuptools after all deps.
+      - name: Prepare requirements for Wine (setuptools last)
+        run: |
+          set -euo pipefail
+          cp pyinstaller/requirements.txt pyinstaller/requirements-wine.txt
+          {
+            echo ""
+            echo "# CI: setuptools last so pkg_resources exists for PyInstaller/altgraph in Wine"
+            echo "setuptools==70.0.0"
+          } >> pyinstaller/requirements-wine.txt
+
+      - name: PyInstaller Windows Build
+        uses: JackMcKew/pyinstaller-action-windows@main
+        with:
+          path: pyinstaller
+          requirements: requirements-wine.txt
+
+      - name: Upload PyInstaller Binary to Workflow as Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maigret_standalone_win32
+          path: pyinstaller/dist/windows
+
+      - name: Download PyInstaller Binary
+        if: success()
+        uses: actions/download-artifact@v4
+        with:
+          name: maigret_standalone_win32
+
+      - name: Create New Release and Upload PyInstaller Binary to Release
+        if: success()
+        uses: ncipollo/release-action@v1.14.0
+        id: create_release
+        with:
+          allowUpdates: true
+          draft: false
+          prerelease: false
+          artifactErrorsFailBuild: true
+          makeLatest: true
+          replacesArtifacts: true
+          artifacts: maigret_standalone.exe
+          name: Development Windows Release [${{ github.ref_name }}]
+          tag: ${{ github.ref_name }}
+          body: |
+            This is a development release built from the **${{ github.ref_name }}** branch.
+
+            Take into account that `dev` releases may be unstable.
+            Please, use [the development release](https://github.com/soxoj/maigret/releases/tag/main) build from the **main** branch.
+
+            ## How to run
+
+            1. Download the attached `maigret_standalone.exe`.
+            2. Either:
+               - **Double-click it** — Maigret will ask you for a username, run a default search, and pause at the end so the output stays visible.
+               - **Run it from a terminal** for full options. Press `Win+R`, type `cmd`, hit Enter (or open PowerShell), then:
+
+                 ```cmd
+                 cd %USERPROFILE%\Downloads
+                 maigret_standalone.exe USERNAME
+                 maigret_standalone.exe USERNAME --html       :: also save an HTML report
+                 maigret_standalone.exe --help                :: list all options
+                 ```
+
+            Video guide: https://youtu.be/qIgwTZOmMmM
+            Full documentation: https://maigret.readthedocs.io/en/latest/
+
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
