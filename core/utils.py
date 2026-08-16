@@ -115,7 +115,7 @@ def print_help():
     console.print("\n[bold green]🚀 REAL-WORLD EXAMPLES:[/bold green]")
 
     examples = [
-        ("[dim]# Username investigation[/dim]", "python zqrya.py -u ruyynn"),
+        ("[dim]# Username investigation[/dim]", "python zqrya.py -u PiuPiuu"),
         ("[dim]# Email with breach detection[/dim]", "python zqrya.py -e user@gmail.com --report --format html"),
         ("[dim]# Phone number (Indonesia)[/dim]", "python zqrya.py -p 08123456789 --deep"),
         ("[dim]# Domain recon with WHOIS[/dim]", "python zqrya.py -d example.com --format all"),

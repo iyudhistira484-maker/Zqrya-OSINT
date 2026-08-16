@@ -487,7 +487,7 @@ let lastUsedType = '';
 
 const PLACEHOLDER = {
   auto: 'Target: username / email / +628xx / domain.com / 8.8.8.8 / https://...',
-  username: 'Username (e.g. ruyynn)',
+  username: 'Username (e.g. PiuPiuu)',
   email: 'Email (e.g. user@gmail.com)',
   phone: 'Phone (e.g. 08123456789 or +12125551234)',
   domain: 'Domain (e.g. example.com)',

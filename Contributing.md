@@ -630,10 +630,10 @@ Don't be discouraged! Rejections are usually accompanied by feedback explaining 
 Have questions that aren't covered here? Reach out directly:
 
 <p align="center">
-  <a href="mailto:ruyynn25@gmail.com">
+  <a href="mailto:PiuPiuu25@gmail.com">
     <img src="https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white">
   </a>
-  <a href="https://github.com/ruyynn">
+  <a href="https://github.com/PiuPiuu">
     <img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white">
   </a>
   <a href="https://web.facebook.com/profile.php?id=61587795784907">
@@ -644,7 +644,7 @@ Have questions that aren't covered here? Reach out directly:
 - 🐛 **Bug reports** → [GitHub Issues](https://github.com/webdev11-code/Zqrya-OSINT/issues)
 - 💡 **Feature ideas** → [GitHub Discussions](https://github.com/webdev11-code/Zqrya-OSINT/discussions)
 - ❓ **Quick questions** → DM on social media above
-- 🤝 **Collaboration** → [Contact Me](mailto:ruyynn25@gmail.com)
+- 🤝 **Collaboration** → [Contact Me](mailto:PiuPiuu25@gmail.com)
 
 ---
 
@@ -662,5 +662,5 @@ Have questions that aren't covered here? Reach out directly:
 </p>
 
 <p align="center">
-  <b>© 2026 Ruyynn.</b>
+  <b>© 2026 PiuPiuu.</b>
 </p>

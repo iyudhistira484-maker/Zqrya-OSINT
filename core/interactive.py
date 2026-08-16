@@ -484,7 +484,7 @@ class InteractiveShell:
 
             # ── scans ──
             elif head in ("u", "username", "1"):
-                await self._ask_and_scan("username", "Username OSINT", "e.g. ruyynn", rest or None)
+                await self._ask_and_scan("username", "Username OSINT", "e.g. PiuPiuu", rest or None)
             elif head in ("e", "email", "2"):
                 await self._ask_and_scan("email", "Email OSINT", "e.g. user@mail.com", rest or None)
             elif head in ("p", "phone", "3"):
