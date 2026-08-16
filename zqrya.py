@@ -248,6 +248,11 @@ async def main_async():
         print_help()
         return
 
+    # ── Gate: database GeoIP wajib diunduh dulu sebelum akses ──
+    from modules.geoip_local import require_geoip
+    if not require_geoip(console):
+        sys.exit(1)
+
     # Web UI
     if args.web:
         from web.server import start_web_server

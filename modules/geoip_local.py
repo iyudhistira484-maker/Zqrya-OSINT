@@ -35,6 +35,7 @@ Tanpa package/file DB, tool otomatis fallback ke konsensus API online.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -54,6 +55,51 @@ _PRIORITY = (
     "dbip-city-lite",
     "geolite2-country",
 )
+
+
+GEOIP_GATE_MSG = """\
+[red]❌ Database GeoIP lokal belum tersedia — akses diblokir.[/red]
+
+   Zqrya butuh minimal satu database .mmdb di folder:
+     data/geoip/   (atau root project / sources/geoip/ / geoip/)
+
+   Cara unduh (sekali saja, ~60 MB, tanpa akun):
+     pip install requests maxminddb
+     python sources/download_geoip.py
+
+   Setelah selesai, jalankan Zqrya lagi.
+"""
+
+
+def has_local_db() -> bool:
+    """True bila ada minimal satu file .mmdb / .mmdb.gz di lokasi pencarian.
+
+    Hanya cek keberadaan file — tidak perlu maxminddb terinstall.
+    """
+    for d in DB_DIRS:
+        if not d.is_dir():
+            continue
+        for p in d.iterdir():
+            if p.is_file() and p.name.lower().endswith((".mmdb", ".mmdb.gz")):
+                return True
+    return False
+
+
+def require_geoip(console=None) -> bool:
+    """Gate akses: blokir bila database GeoIP belum diunduh.
+
+    Return True bila boleh lanjut (DB ada, atau env ZQRYA_ALLOW_NO_GEOIP=1).
+    Pesan ditampilkan via `console` (rich) bila diberikan, selain itu print polos.
+    """
+    if has_local_db():
+        return True
+    if os.environ.get("ZQRYA_ALLOW_NO_GEOIP", "").strip().lower() in ("1", "yes", "true", "on"):
+        return True
+    if console is not None:
+        console.print(GEOIP_GATE_MSG)
+    else:
+        print("\n" + GEOIP_GATE_MSG.replace("[/red]", "").replace("[red]", "").replace("[dim]", "").replace("[/dim]", ""))
+    return False
 
 
 class LocalGeoIP:

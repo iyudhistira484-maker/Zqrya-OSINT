@@ -526,6 +526,14 @@ class InteractiveShell:
 
     # ─────────────────────────── main loop ───────────────────────────
     async def run(self):
+        # Gate: database GeoIP wajib diunduh dulu sebelum akses
+        try:
+            from modules.geoip_local import require_geoip
+            if not require_geoip(console):
+                return
+        except ImportError:
+            pass
+
         clear_screen()
         show_banner()
         console.print(

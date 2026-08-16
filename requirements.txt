@@ -23,6 +23,10 @@ googlesearch-python>=1.2
 pyvis>=0.3.2
 networkx>=2.6.3
 
+# ── Wajib untuk Maigret (db_updater, report) + sources/download_geoip.py ──
+requests>=2.31.0
+python-dateutil>=2.8.2
+
 # ── EXIF lokal (fallback gratis tanpa EXIFTOOLS_API_KEY) ──
 Pillow>=10.0.0
 
@@ -31,6 +35,13 @@ brotli>=1.1.0
 
 # ── GeoIP lokal (GeoLite2 / DB-IP Lite, opsional) ──
 maxminddb>=2.0.0
+
+# ── Fitur tambahan (semua terpasang; masing-masing punya fallback) ──
+curl_cffi>=0.7.0            # Bypass TLS Cloudflare/Instagram (maigret tls_fingerprint)
+opencv-python-headless>=4.8.0  # Decode QR/barcode lokal (fallback: API online)
+pyzbar>=0.1.9               # Decode barcode lokal (fallback kedua QR)
+zxing-cpp>=1.4.0            # Decode barcode lokal (fallback ketiga QR)
+xmind>=1.0.0                # Report maigret format XMind
 
 # ── Maigret Engine (600+ platforms, vendored in maigret/) ──
 # Installed via: pip install -e maigret/

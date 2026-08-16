@@ -222,6 +222,14 @@ async def _telegram_send(username: str, result: dict, report_files: list):
 #  MAIN MENU (with loop)
 # ============================================================
 def show_menu():
+    # Gate: database GeoIP wajib diunduh dulu sebelum akses
+    try:
+        from modules.geoip_local import require_geoip
+        if not require_geoip():
+            sys.exit(1)
+    except ImportError:
+        pass
+
     while True:
         _clear_screen()
         term.print_banner()
@@ -1134,6 +1142,14 @@ def _phone_menu_v2(phone: str):
 
 def show_menu_v2():
     """Enhanced v2.0 menu with Cyber Intel Mode."""
+    # Gate: database GeoIP wajib diunduh dulu sebelum akses
+    try:
+        from modules.geoip_local import require_geoip
+        if not require_geoip():
+            sys.exit(1)
+    except ImportError:
+        pass
+
     while True:
         _clear_screen()
         term.print_banner()

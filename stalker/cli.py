@@ -57,7 +57,13 @@ def cli():
       stalker variants johndoe
       stalker darkweb test@gmail.com
     """
-    pass
+    # Gate: database GeoIP wajib diunduh dulu sebelum akses
+    try:
+        from modules.geoip_local import require_geoip
+        if not require_geoip():
+            sys.exit(1)
+    except ImportError:
+        pass
 
 
 @cli.command()
