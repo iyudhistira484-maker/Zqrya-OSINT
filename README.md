@@ -356,4 +356,6 @@ MIT License — Feel free to use, modify, and distribute with credit.
 
 **© 2026 Zqrya.** Built with ❤️ in Indonesia 🇮🇩
 
+**If Zqrya helps you, give it a ⭐ on GitHub!**
+
 </div>
